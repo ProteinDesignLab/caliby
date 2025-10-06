@@ -1,0 +1,23 @@
+# Run settings
+seed: 0
+num_workers: 8  # for dataloading
+
+# Inputs
+model_params_path: null
+sampling_yaml_path: caliby/configs/protpardelle-1c/multichain_backbone_partial_diffusion.yaml
+out_dir: null
+num_samples_per_pdb: 32
+batch_size: 8
+
+# PDB file inputs
+input_cfg:
+  pdb_dir: null
+  pdb_name_list: null  # list of pdb_names to use from the pdb_dir, null to use all .pdb files
+  pdb_name_ext: ""  # if pdb_name_list does not have extensions, add this extension
+  n_subsample: null  # randomly sample this many pdb keys, null to use all
+  array_id: null
+  num_arrays: null
+
+hydra:
+  run:
+    dir: hydra_outputs

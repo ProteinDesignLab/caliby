@@ -1,0 +1,30 @@
+# Run settings
+seed: 0
+num_workers: 8  # for dataloading
+
+# Inputs
+ckpt_path: null
+out_dir: null
+
+# PDB file inputs
+input_cfg:
+  pdb_dir: null
+  pdb_name_list: null  # list of pdb_names to use from the pdb_dir, null to use all .pdb files
+  pdb_name_ext: ""  # if pdb_name_list does not have extensions, add this extension
+  n_subsample: null  # randomly sample this many pdb keys, null to use all
+
+# Sampling config
+sampling_cfg_overrides:
+  batch_size: 16
+  num_workers: ${num_workers}
+
+seq_des_cfg:
+  model_name: "atom_mpnn"
+  atom_mpnn:
+    ckpt_path: ${ckpt_path}
+    sampling_cfg: caliby/configs/seq_des/atom_mpnn_inference.yaml
+    overrides: ${sampling_cfg_overrides}
+
+hydra:
+  run:
+    dir: hydra_outputs

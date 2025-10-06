@@ -1,0 +1,29 @@
+out_dir: null
+save_subset_cifs: false
+num_workers: 8
+
+# PDB file inputs
+input_cfg:
+  pdb_dir: null
+  pdb_name_list: null  # list of pdb_names to use from the pdb_dir, null to use all .pdb files
+  pdb_name_ext: ""  # if pdb_name_list does not have extensions, add this extension
+  n_subsample: null  # randomly sample this many pdb keys, null to use all
+
+# PDB name lists
+pdb_name_lists:
+  # Protein-only PDBs
+  - name: protein_only_monomer_32_256
+    filters:
+      - "32 < num_prot_res <= 256"
+      - "1 <= num_prot_chains <= 1"
+      - "is_protein_only"
+  - name: protein_only_monomer_32_512
+    filters:
+      - "32 < num_prot_res <= 512"
+      - "1 <= num_prot_chains <= 1"
+      - "is_protein_only"
+  - name: protein_only_monomer_32_1024
+    filters:
+      - "32 < num_prot_res <= 1024"
+      - "1 <= num_prot_chains <= 1"
+      - "is_protein_only"

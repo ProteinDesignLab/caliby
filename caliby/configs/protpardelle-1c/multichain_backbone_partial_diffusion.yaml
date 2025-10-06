@@ -1,0 +1,21 @@
+partial_diffusion:
+  enabled: true
+  rewind_steps: [150]
+search_space:
+  models:
+    - ["cc95", "3490", "sampling_partial_diffusion"] # multichain model, backbone-only
+  step_scales: [1.0] # don't do SDE sampling to faithfully sample from what the model learns
+  schurns: [0]
+  crop_cond_starts: [0.0]
+  translations:
+    - [0.0, 0.0, 0.0]
+motifs:
+  - null
+motif_contigs:
+  - partial_diffusion
+total_lengths:
+  - null
+hotspots:
+  - null
+ssadj:
+  - null

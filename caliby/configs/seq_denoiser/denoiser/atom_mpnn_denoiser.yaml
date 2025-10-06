@@ -1,0 +1,32 @@
+name: atom_mpnn
+
+defaults:
+  - _self_
+  - interpolant: edm_interpolant
+
+task: ${model.task}
+
+# Backbone noise options
+augment_eps: 0.0
+
+mpnn:
+  n_channel: 128
+  k_neighbors: 48
+  n_layers: 3
+  dropout_p: 0.1
+
+  token_features:
+    ca_only: false
+    k_neighbors: ${denoiser.mpnn.k_neighbors}
+    num_rbf: 16
+    num_positional_embeddings: 16
+    edge_n_channel: ${denoiser.mpnn.n_channel}
+    use_multichain_encoding: false
+
+  potts:
+    k_neighbors_potts: 48
+    max_dist_potts: null
+    use_potts: true
+    parameterization: "factor"
+    num_factors: null
+    symmetric_J: true

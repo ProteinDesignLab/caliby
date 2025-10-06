@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "caliby"
+version = "0.1"
+requires-python = ">=3.12"
+
+[tool.setuptools.packages.find]
+exclude = ["tests", "scripts"]
+
+[tool.ruff]
+line-length = 120
+exclude = ["chroma"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E731"]
+
+[tool.ruff.format]
+quote-style = "preserve"   # avoid churning quotes
+indent-style = "space"

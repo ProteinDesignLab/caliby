@@ -1,0 +1,34 @@
+# Run settings
+seed: 0
+num_workers: 8  # for dataloading
+
+# Inputs
+ckpt_path: null
+out_dir: null
+
+# PDB file inputs
+input_cfg:
+  conformer_dir: null
+  pdb_name_list: null
+  array_id: null
+  num_arrays: null
+
+# Ensemble parameters
+max_num_conformers: 32
+include_primary_conformer: true
+
+# Sampling config
+sampling_cfg_overrides:
+  batch_size: 16
+  num_workers: ${num_workers}
+
+seq_des_cfg:
+  model_name: "atom_mpnn"
+  atom_mpnn:
+    ckpt_path: ${ckpt_path}
+    sampling_cfg: caliby/configs/seq_des/atom_mpnn_inference.yaml
+    overrides: ${sampling_cfg_overrides}
+
+hydra:
+  run:
+    dir: hydra_outputs

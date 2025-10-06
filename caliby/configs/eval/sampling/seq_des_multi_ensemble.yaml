@@ -1,0 +1,40 @@
+# Run settings
+seed: 0
+num_workers: 8  # for dataloading
+
+# Inputs
+ckpt_path: null
+out_dir: null
+
+# PDB file inputs
+input_cfg:
+  conformer_dir: null
+  pdb_name_list: null
+  array_id: null
+  num_arrays: null
+
+# Ensemble parameters
+max_num_conformers: 32
+include_primary_conformer: true
+
+# Positional constraints: supports columns in [pdb_key,fixed_pos_seq,fixed_pos_scn,fixed_pos_override_seq,pos_restrict_aatype]
+# e.g. 2fyzA,"A1-100,B1-100","A1-100"
+pos_constraint_csv: null
+
+# Sampling config
+sampling_cfg_overrides:
+  batch_size: 4
+  num_seqs_per_pdb: 16  # number of sequences to sample per pdb
+  num_workers: ${num_workers}
+
+# Sampling config
+seq_des_cfg:
+  model_name: "atom_mpnn"
+  atom_mpnn:
+    ckpt_path: ${ckpt_path}
+    sampling_cfg: caliby/configs/seq_des/atom_mpnn_inference.yaml
+    overrides: ${sampling_cfg_overrides}
+
+hydra:
+  run:
+    dir: hydra_outputs

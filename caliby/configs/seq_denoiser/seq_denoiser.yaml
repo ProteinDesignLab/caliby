@@ -1,0 +1,163 @@
+# Wandb configuration
+wandb:
+  no_wandb: false  # Disable wandb logging
+  project: "caliby"  # Wandb project name
+  wandb_id: "richardshuai"  # Wandb username
+  group: "debug" # Wandb group name
+
+# Outputs
+out_dir: "out_dir/train_seq_denoiser"  # Output path for trained models
+exp_name: null  # Wandb exp name
+
+# Run settings
+overfit: -1 # Number of examples to overfit to, -1 to disable
+cuda: True
+num_workers: 8 # Dataloader num workers
+
+train:
+  seed: 0
+  batch_size: 8
+  compile_model: false  # Compile the model before running, speeds up training a lot
+
+# Some trainer options
+trainer:
+  strategy: ddp  # use "ddp_find_unused_parameters_true" if expecting unused parameters in model
+  max_epochs: -1
+  max_steps: 100000
+  accumulate_grad_batches: 1
+  detect_anomaly: false  # Slower; enable for debugging nans in gradients
+  gradient_clip_val: 0.0
+  precision: "bf16-mixed"  # bf16-mixed  TODO: compare against fp32 as baseline
+  check_val_every_n_epoch: 50  # How often to run validation
+
+# Resuming training options
+resume:
+  ckpt_path: null  # Path to checkpoint to resume from, null to disable
+  # use_current_cfg: false  # whether to override the config in the checkpoint with the current config
+  # overrides: {}  # add any specific overrides to apply to the config
+
+data:
+  pdb_path: /media/scratch/datasets/atomworks_debug
+  parquet_path: ${data.pdb_path}/metadata_clustered.parquet
+  validation_ids_txt: ${data.pdb_path}/splits/validation_ids.txt  # Boltz val set ids. Filtering is case insensitive, no extension.
+  exclude_ids_txts: []  # list of txt files containing pdb ids to exclude
+
+  sampling_weights:
+    alphas:
+      a_prot: 1.0
+      a_peptide: 0.0
+      a_nuc: 0.0
+      a_ligand: 0.0
+      a_loi: 0.0
+    betas:
+      beta_chain: 1.0
+      beta_interface: 0.0
+
+  train_filters:
+    chain:
+      - "num_polymer_pn_units < 50"
+      - "release_date <= '2021-09-30'"
+      - "resolution < 9.0"
+      - "16 < q_pn_unit_sequence_length < 2048"
+      - "n_prot > 0"
+
+  val_filters:
+    chain:
+      - "num_polymer_pn_units < 50"
+      - "'2021-09-30' < release_date <= '2023-01-13'"  # Boltz validation set dates.
+      - "resolution < 4.5"
+      - "16 < q_pn_unit_sequence_length < 2048"
+      - "n_prot > 0"
+
+  # CIF parser args. Not used during training since we've already cached the CIFs.
+  cif_parser_args:
+    add_missing_atoms: true
+    remove_waters: true
+    remove_ccds: []
+    fix_ligands_at_symmetry_centers: true
+    fix_arginines: true
+    convert_mse_to_met: true
+    hydrogen_policy: "remove"
+
+  featurizer_cfg:
+    # SE3 augmentation.
+    apply_random_augmentation: true
+    translation_scale: 1.0
+
+    # Cropping.
+    max_tokens: 512
+    max_atoms: 4608
+    crop_center_cutoff_distance: 15.0
+    crop_spatial_p: 0.0
+
+  samples_per_epoch: 50000
+  batch_size: ${train.batch_size}
+  num_workers: ${num_workers}
+  random_seed: ${train.seed}
+
+
+# Model options
+defaults:
+  - _self_
+  - denoiser: atom_mpnn_denoiser
+  - mask_selector: mask_selector
+
+model:
+  task: "seq_des"  # "seq_des"
+  sigma_data: [9.6, 0.64]  # sigma data for [backbone, local sidechain]
+  eps: 1.0e-8
+  inf: 1.0e9
+  denoiser: ${denoiser}
+
+  # Masking options
+  mask_selector: ${mask_selector}
+
+  ema:
+    use_phema: false  # use post-hoc EMA
+    ema_decay: 0.99  # if not using phema, use this decay rate
+
+eval:
+  eval_timesteps: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]  # Timesteps to evaluate at
+
+loss:
+  task: ${model.task}
+  inf: ${model.inf}
+  loss_weights:
+    seq_loss: 1.0
+    potts_composite_loss: 1.0
+
+  # loss configs
+  seq_loss:
+    label_smoothing: 0.1
+    per_token_avg: false
+
+  potts:
+    label_smoothing: 0.1
+    per_token_avg: false
+
+optim:
+  optimizer: "noam"
+  adamw:
+    lr: 1.0e-4
+    warmup_steps: 1000
+  noam:
+    factor: 2
+    warmup_steps: 4000
+  adam_inv_sqrt:
+    ref_lr: 1.0e-3
+    ref_steps: 50000
+    warmup_steps: 4000
+
+logging:
+  log_dir: ${out_dir}
+  log_every_n_steps: 500
+  wandb_watch_freq: 5000  # Log gradients every n steps
+
+checkpointing:
+  save_latest_every_n_steps: 2500  # Save the model every n steps
+  save_for_resuming_every_n_epochs: 10  # Keep 1 latest copy of the model every n epochs, for resuming
+  save_phema_every_n_steps: 3000  # If using post-hoc EMA, save snapshot every n steps
+
+hydra:
+  run:
+    dir: hydra_outputs

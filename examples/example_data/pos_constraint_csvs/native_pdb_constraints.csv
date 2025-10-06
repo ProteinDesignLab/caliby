@@ -1,0 +1,4 @@
+pdb_key,fixed_pos_seq,fixed_pos_scn,fixed_pos_override_seq,pos_restrict_aatype
+7xhz,"A6-15,A20-50","A6-15",,
+7xz3,,,"A36:C,A37:C,A38:C,A39:C,A40:C",
+8huz,,,,"A6:QR,A7:QR,A8:QR,A9:QR,A10:QR,A11:QR"
