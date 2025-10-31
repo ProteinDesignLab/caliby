@@ -6,7 +6,7 @@ from pathlib import Path
 import hydra
 import pandas as pd
 import yaml
-from atomworks.ml.common import generate_example_id
+from atomworks.ml.example_id import generate_example_id
 from atomworks.ml.preprocessing.get_pn_unit_data_from_structure import DataPreprocessor
 from omegaconf import DictConfig, OmegaConf
 from p_tqdm import p_umap

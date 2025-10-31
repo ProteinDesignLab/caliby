@@ -10,17 +10,17 @@ import lightning as L
 import numpy as np
 import pandas as pd
 import torch
-from atomworks.ml.common import generate_example_id
-from atomworks.ml.datasets.datasets import BaseDataset
+from atomworks.ml.datasets.datasets import FileDataset
 from atomworks.ml.datasets.parsers import GenericDFParser
+from atomworks.ml.example_id import generate_example_id
 from atomworks.ml.utils.io import read_parquet_with_metadata
 from omegaconf import DictConfig
 from torch.utils import data
 from torch.utils.data import DataLoader
 
 from caliby.data.sampler import Sampler
-from caliby.data.transform.pad import pad_to_max
 from caliby.data.transform import sd_featurizer
+from caliby.data.transform.pad import pad_to_max
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +69,7 @@ def worker_init_fn(_):
     random.seed(worker_seed)
 
 
-class SDDataset(BaseDataset):
+class SDDataset(FileDataset):
     def __init__(self, cfg: DictConfig, phase: Literal["train", "val"]):
         super().__init__()
 

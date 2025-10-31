@@ -1,3 +1,3 @@
 --index-url=https://pypi.org/simple
---extra-index-url=https://download.pytorch.org/whl/cu126
---find-links=https://data.pyg.org/whl/torch-2.7.0+cu126.html
+--extra-index-url=https://download.pytorch.org/whl/cu124
+--find-links=https://data.pyg.org/whl/torch-2.6.0+cu124.html

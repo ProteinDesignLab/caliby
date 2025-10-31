@@ -7,7 +7,7 @@ from typing import Final
 
 import biotite.structure as struc
 import numpy as np
-from atomworks.io.constants import (
+from atomworks.constants import (
     AA_LIKE_CHEM_TYPES,
     DNA_LIKE_CHEM_TYPES,
     GAP,

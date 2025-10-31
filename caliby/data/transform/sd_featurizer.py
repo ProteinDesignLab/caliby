@@ -1,10 +1,10 @@
 from typing import Any, override
 
 import atomworks.enums as aw_enums
-import atomworks.io.constants as aw_const
+import atomworks.constants as aw_const
 import numpy as np
 import torch
-from atomworks.io.constants import AF3_EXCLUDED_LIGANDS, STANDARD_AA, STANDARD_DNA, STANDARD_RNA
+from atomworks.constants import AF3_EXCLUDED_LIGANDS, STANDARD_AA, STANDARD_DNA, STANDARD_RNA
 from atomworks.ml.transforms.atom_array import AddGlobalTokenIdAnnotation, ComputeAtomToTokenMap
 from atomworks.ml.transforms.base import (
     AddData,
