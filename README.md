@@ -129,6 +129,12 @@ In general, residue index positions should be specified by the `label_seq_id` co
 ## Sidechain packing
 We plan to add sidechain packing support natively within Caliby in the future. For now, we recommend using Full-Atom MPNN (FAMPNN) for sidechain packing. Please see more details at the official repository for FAMPNN: https://github.com/richardshuai/fampnn.
 
+# FAQs
+
+### I encountered a "Residue index / chain ID mismatch between decoys" error when running ensemble-conditioned sequence design. How do I fix this?
+
+When running ensemble-conditioned sequence design, Caliby requires that the residue indices / chain IDs of the decoys are aligned with the residue indices / chain IDs of the primary conformer. Otherwise, a misalignment could occur when aggregating Potts model parameters across the decoys, which would silently yield poor results. We recommend examining the decoys to ensure all residues line up correctly. If this occurred with a Protpardelle-generated ensemble, this was likely due to inconsistent handling of ignored residues between Protpardelle and Caliby. For this case, we provide a script in `examples/scripts/clean_pdbs.sh` that you can run to clean your PDB file before ensemble generation to ensure that the resulting ensembles are aligned correctly.
+
 # License
 Caliby is licensed under the Apache License 2.0. See `LICENSE` for more details.
 

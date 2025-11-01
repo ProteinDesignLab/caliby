@@ -132,3 +132,6 @@ PROT_LETTER_TO_TOKEN: Final[dict[str, str]] = {
     "X": "UNK",
 }  # include "X" for unknown amino acids
 PROT_TOKEN_TO_LETTER: Final[dict[str, str]] = {v: k for k, v in PROT_LETTER_TO_TOKEN.items()}
+
+# When generating partial diffusion ensembles, other resnames get ignored by Protpardelle-1c.
+PROTPARDELLE_SUPPORTED_RESNAMES: Final[list[str]] = [*STANDARD_AA, UNKNOWN_AA, "MSE"]

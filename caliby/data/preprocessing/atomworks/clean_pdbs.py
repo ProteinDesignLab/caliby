@@ -1,27 +1,26 @@
 """
-Preprocess mmCIF files from the RCSB using AtomWorks.
-This is helpful for e.g. building the first bioassembly for other tools to use (e.g. Protpardelle-1c).
+Clean PDB files for use with Protpardelle-1c ensemble generation.
 """
 
 from pathlib import Path
 
+import atomworks.enums as aw_enums
 import hydra
+import numpy as np
 from atomworks.io.utils.io_utils import to_cif_string
 from joblib import Parallel, delayed
 from omegaconf import DictConfig
 from tqdm import tqdm
 
+from caliby.data import const
 from caliby.eval.eval_utils.eval_setup_utils import get_pdb_files
-from caliby.eval.eval_utils.seq_des_utils import preprocess_pdb
+from caliby.eval.eval_utils.seq_des_utils import get_sd_example
 
 
 @hydra.main(
-    config_path="../../../configs/data/preprocessing/atomworks", config_name="clean_rcsb_cifs", version_base="1.3.2"
+    config_path="../../../configs/data/preprocessing/atomworks", config_name="clean_pdbs", version_base="1.3.2"
 )
 def main(cfg: DictConfig):
-    """
-    Clean mmCIF files from the RCSB using AtomWorks.
-    """
     Path(cfg.out_dir).mkdir(parents=True, exist_ok=True)
     use_parallel = cfg.num_workers > 1
 
@@ -31,17 +30,30 @@ def main(cfg: DictConfig):
     # Clean the PDB files.
     if use_parallel:
         parallel = Parallel(n_jobs=cfg.num_workers)
-        jobs = [delayed(_clean_rcsb_cif)(pdb_path, cfg.out_dir) for pdb_path in pdb_files]
+        jobs = [
+            delayed(_clean_pdb)(pdb_path, cfg.out_dir) for pdb_path in pdb_files
+        ]
         list(parallel(tqdm(jobs, total=len(jobs), desc="Cleaning RCSB mmCIF files")))
     else:
         for pdb_path in tqdm(pdb_files, total=len(pdb_files), desc="Cleaning RCSB mmCIF files"):
-            _clean_rcsb_cif(pdb_path, cfg.out_dir)
+            _clean_pdb(pdb_path, cfg.out_dir)
 
 
-def _clean_rcsb_cif(pdb_path: str, out_dir: str):
+def _clean_pdb(pdb_path: str, out_dir: str):
     # Preprocess the PDB file.
-    example = preprocess_pdb(pdb_path, None)
+    example = get_sd_example(pdb_path, data_cfg=None)
     atom_array = example["atom_array"]
+
+    # Remove any unresolved atoms.
+    atom_array = atom_array[atom_array.occupancy > 0]
+
+    # Keep only protein chains.
+    is_protein = np.isin(atom_array.chain_type, aw_enums.ChainTypeInfo.PROTEINS)
+    atom_array = atom_array[is_protein]
+
+    # Keep only resnames supported by Protpardelle-1c.
+    keep_mask = np.isin(atom_array.res_name, const.PROTPARDELLE_SUPPORTED_RESNAMES)
+    atom_array = atom_array[keep_mask]
 
     # Map each unique pair of (chain_id, transformation_id) to a sequential label 'A', 'B', ..., 'Z', 'AA', ...
     unique_pairs = []
