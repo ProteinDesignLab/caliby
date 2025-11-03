@@ -25,6 +25,7 @@ Both this repository and Caliby are still under active development, so please re
     - [Globally omit certain amino acids](#globally-omit-certain-amino-acids)
     - [Position-wise constraints](#position-wise-constraints)
   - [Sidechain packing](#sidechain-packing)
+- [FAQs](#faqs)
 - [License](#license)
 - [Citation](#citation)
 
