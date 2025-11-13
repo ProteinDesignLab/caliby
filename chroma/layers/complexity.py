@@ -52,6 +52,7 @@ def compositions(S: torch.Tensor, C: torch.LongTensor, w: int = 30):
     edge_idx = (
         torch.arange(S.shape[1], device=S.device)[None, :, None] + kx[None, None, :]
     )
+    edge_idx = edge_idx.expand(S.shape[0], -1, -1)
     mask_ij = (edge_idx > 0) & (edge_idx < S.shape[1])
     edge_idx = edge_idx.clamp(min=0, max=S.shape[1] - 1)
     C_i = C[..., None]

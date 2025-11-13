@@ -668,6 +668,7 @@ def collect_neighbors(node_h: torch.Tensor, edge_idx: torch.Tensor) -> torch.Ten
         neighbor_h (torch.Tensor): Edge features containing neighbor node information
             with shape `(num_batch, num_nodes, num_neighbors, num_features)`.
     """
+    assert edge_idx.shape[0] == node_h.shape[0], "num_batch of edge_idx and node_h must match"
     num_batch, num_nodes, num_neighbors = edge_idx.shape
     num_features = node_h.shape[2]
 
