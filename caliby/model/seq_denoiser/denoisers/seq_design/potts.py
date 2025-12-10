@@ -371,7 +371,6 @@ class GraphPotts(nn.Module):
         verbose: bool = False,
         edge_idx_coloring: Optional[torch.LongTensor] = None,
         mask_ij_coloring: Optional[torch.Tensor] = None,
-        symmetry_order: Optional[int] = None,
     ) -> tuple[torch.LongTensor, torch.Tensor]:
         """Sample from Potts model with Chromatic Gibbs sampling.
 
@@ -417,13 +416,6 @@ class GraphPotts(nn.Module):
                     `(num_batch, num_nodes, num_neighbors_coloring)`.
             mask_ij_coloring (torch.Tensor): Edge mask for the alternative dependency
                 structure with shape `(num_batch, num_nodes, num_neighbors_coloring)`.
-            symmetry_order (int, optional): Optional integer argument to enable
-                symmetric sequence decoding under `symmetry_order`-order symmetry.
-                The first `(num_nodes // symmetry_order)` states will be free to
-                move, and all consecutively tiled sets of states will be locked
-                to these during decoding. Internally this is accomplished by
-                summing the parameters Potts model under a symmetry constraint
-                into this reduced sized system and then back imputing at the end.
 
         Returns:
             S (torch.LongTensor): Sampled sequences with
@@ -431,14 +423,6 @@ class GraphPotts(nn.Module):
             U (torch.Tensor): Sampled energies with shape `(num_batch)`. Lower
                 is more favorable.
         """
-        B, N, _ = h.shape
-
-        if symmetry_order is not None:
-            h, J, edge_idx, mask_i, mask_ij = fold_symmetry(symmetry_order, h, J, edge_idx, mask_i, mask_ij)
-            S = S[:, : (N // symmetry_order)]
-            if mask_sample is not None:
-                mask_sample = mask_sample[:, : (N // symmetry_order)]
-
         S_sample, U_sample = sample_potts(
             h,
             J,
@@ -459,9 +443,6 @@ class GraphPotts(nn.Module):
             mask_ij_coloring=mask_ij_coloring,
         )
 
-        if symmetry_order is not None:
-            assert N % symmetry_order == 0
-            S_sample = S_sample[:, None, :].expand([-1, symmetry_order, -1]).reshape([B, N])
         return S_sample, U_sample
 
 
@@ -500,92 +481,6 @@ def compute_potts_energy(
     S_expand = S[..., None]
     U = (torch.gather(U_i, -1, S[..., None]) - 0.5 * torch.gather(J_i, -1, S[..., None])).sum((1, 2))
     return U, U_i
-
-
-def fold_symmetry(
-    symmetry_order: int,
-    h: torch.Tensor,
-    J: torch.Tensor,
-    edge_idx: torch.LongTensor,
-    mask_i: torch.Tensor,
-    mask_ij: torch.Tensor,
-    normalize=True,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Fold Potts model symmetrically.
-
-    Args:
-        symmetry_order (int): The order of symmetry by which to fold the Potts
-            model such that the first `(num_nodes // symmetry_order)` states
-            represent the entire system and all fields and couplings to and
-            among other copies of this base system are collected together in
-            single reduced Potts model.
-        h (torch.Tensor): Potts model fields :math:`h_i(s_i)` with shape
-            `(num_batch, num_nodes, num_states)`.
-        J (Tensor): Potts model couplings :math:`J_{ij}(s_i, s_j)` with shape
-            `(num_batch, num_nodes, num_neighbors, num_states, num_states)`.
-        edge_idx (torch.LongTensor): Edge indices with shape
-            `(num_batch, num_nodes, num_neighbors)`.
-        mask_i (torch.Tensor): Node mask with shape `(num_batch, num_nodes)`.
-        mask_ij (torch.Tensor): Edge mask with shape
-            `(num_batch, num_nodes, num_neighbors)`.
-        normalize (bool): If True (default), aggregate the Potts model as an average
-            energy across asymmetric units instead of as a sum.
-
-    Returns:
-        h_fold (torch.Tensor): Potts model fields :math:`h_i(s_i)` with shape
-            `(num_batch, num_nodes_folded, num_states)`, where
-            `num_nodes_folded =  num_nodes // symmetry_order`.
-        J_fold (Tensor): Potts model couplings :math:`J_{ij}(s_i, s_j)` with shape
-            `(num_batch, num_nodes_folded, num_neighbors, num_states, num_states)`.
-        edge_idx_fold (torch.LongTensor): Edge indices with shape
-            `(num_batch, num_nodes_folded, num_neighbors)`.
-        mask_i_fold (torch.Tensor): Node mask with shape `(num_batch, num_nodes_folded)`.
-        mask_ij_fold (torch.Tensor): Edge mask with shape
-            `(num_batch, num_nodes_folded, num_neighbors)`.
-
-    """
-    B, N, K, Q, _ = J.shape
-    device = h.device
-
-    N_asymmetric = N // symmetry_order
-    # Fold edges by densifying the assymetric unit and averaging
-    edge_idx_au = torch.remainder(edge_idx, N_asymmetric).clamp(max=N_asymmetric - 1)
-
-    def _pairwise_fold(_T):
-        # Fold-sum along neighbor dimension
-        shape = list(_T.shape)
-        shape[2] = N_asymmetric
-        _T_au_expand = torch.zeros(shape, device=device).float()
-        extra_dims = len(_T.shape) - len(edge_idx_au.shape)
-        edge_idx_au_expand = edge_idx_au.reshape(list(edge_idx_au.shape) + [1] * extra_dims).expand(
-            [-1, -1, -1] + [Q] * extra_dims
-        )
-        _T_au_expand.scatter_add_(2, edge_idx_au_expand, _T.float())
-
-        # Fold-mean along self dimension
-        shape_out = [shape[0], -1, N_asymmetric, N_asymmetric] + shape[3:]
-        _T_au = _T_au_expand.reshape(shape_out).sum(1)
-        return _T_au
-
-    J_fold = _pairwise_fold(J)
-    mask_ij_fold = (_pairwise_fold(mask_ij) > 0).float()
-    edge_idx_fold = torch.arange(N_asymmetric, device=device).long()[None, None, :].expand(mask_ij_fold.shape)
-
-    # Drop unused edges
-    K_fold = mask_ij_fold.sum(2).max().item()
-    _, sort_ix = torch.sort(mask_ij_fold, dim=2, descending=True)
-    sort_ix_J = sort_ix[..., None, None].expand(list(sort_ix.shape) + [Q, Q])
-    edge_idx_fold = torch.gather(edge_idx_fold, 2, sort_ix)
-    mask_ij_fold = torch.gather(mask_ij_fold, 2, sort_ix)
-    J_fold = torch.gather(J_fold, 2, sort_ix_J)
-
-    # Fold-mean along self dimension
-    h_fold = h.reshape([B, -1, N_asymmetric, Q]).sum(1)
-    mask_i_fold = (mask_i.reshape([B, -1, N_asymmetric]).sum(1) > 0).float()
-    if normalize:
-        h_fold = h_fold / symmetry_order
-        J_fold = J_fold / symmetry_order
-    return h_fold, J_fold, edge_idx_fold, mask_i_fold, mask_ij_fold
 
 
 @torch.no_grad()

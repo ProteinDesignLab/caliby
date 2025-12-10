@@ -24,6 +24,7 @@ Both this repository and Caliby are still under active development, so please re
   - [Additional sequence design options](#additional-sequence-design-options)
     - [Globally omit certain amino acids](#globally-omit-certain-amino-acids)
     - [Position-wise constraints](#position-wise-constraints)
+    - [Specifying symmetry positions](#specifying-symmetry-positions)
   - [Sidechain packing](#sidechain-packing)
 - [FAQs](#faqs)
 - [License](#license)
@@ -120,12 +121,18 @@ Caliby also supports applying various constraints on certain residues, specified
 | `fixed_pos_scn` | `A1-10,A12,A15-20` | Sidechain positions in the input PDB to condition on so that they remain fixed during design. Note that fixed sidechain positions must be a subset of fixed sequence positions, since it does not make sense to condition on a sidechain without also conditioning on its sequence identity.|
 | `fixed_pos_override_seq` | `A26:A,A27:L` | Sequence positions in the input PDB to first override the sequence at, and then condition on. The colon separates the position and the desired amino acid.|
 | `pos_restrict_aatype` | `A26:AVG,A27:VG` | Allowed amino acids for certain positions in the input PDB. The colon separates the position and the allowed amino acids.|
+| `symmetry_pos` | `A10,B10,C10\|A11,B11,C11` | Symmetry positions for tying sampling across residue positions. The pipe separates groups of positions to sample symmetrically. In the example, A10, B10, and C10 are tied together, and A11, B11, and C11 are tied together. |
 
 If `pos_constraint_csv` is not provided, Caliby will redesign all positions. If a column is not present in the CSV, Caliby will not apply any constraints for that column. If a particular column is included in the CSV, but its value for the `pdb_key` at that row is empty, Caliby will not apply that constraint for that PDB.
 
 For an example constraint CSV file, see `examples/example_data/pos_constraint_csvs/native_pdb_constraints.csv`. For example usage, see `examples/scripts/seq_des_multi_constraints.sh` and `examples/scripts/seq_des_multi_ensemble_constraints.sh`.
 
 In general, residue index positions should be specified by the `label_seq_id` column, *not the `auth_seq_id` column*. To view positions of the sequence using the `label_seq_id` in PyMOL, you can run `set cif_use_auth, off` in PyMOL before loading in the PDB file.
+
+### Specifying symmetry positions
+Caliby supports specifying symmetry positions for tying sampling across residue positions. This is specified via the `symmetry_pos` column in the `pos_constraint_csv` file. For an example of a symmetry position CSV file, see `examples/example_data/pos_constraint_csvs/homooligomer_constraints.csv`.
+
+For example usage in sequence design and ensemble generation, see the scripts under the `examples/scripts/homooligomers` directory. We also provide a script to quickly generate a symmetry_pos entry for a homooligomer at `examples/scripts/homooligomers/make_homooligomer_symmetry_pos.sh`, which can be used to print out a symmetry_pos entry by specifying chain IDs and residue ranges.
 
 ## Sidechain packing
 We plan to add sidechain packing support natively within Caliby in the future. For now, we recommend using Full-Atom MPNN (FAMPNN) for sidechain packing. Please see more details at the official repository for FAMPNN: https://github.com/richardshuai/fampnn.

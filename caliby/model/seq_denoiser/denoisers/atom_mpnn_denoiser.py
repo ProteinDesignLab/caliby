@@ -216,6 +216,9 @@ class AtomMPNNDenoiser(BaseSeqDenoiser):
                 edge_idx_coloring=edge_idx_coloring,
                 mask_ij_coloring=mask_ij_coloring,
             )
+            if sampling_inputs.get("symmetry_pos", None) is not None:
+                S_sample = _unfold_symmetry_pos(S_sample, sampling_inputs["symmetry_pos"])
+
             # Set all tokens that don't exist in the graph to unknown.
             S_sample = torch.where(
                 ~batch["token_exists_mask"].bool() & (batch["is_protein"] | batch["is_ligand"]),
@@ -319,7 +322,7 @@ class AtomMPNNDenoiser(BaseSeqDenoiser):
         if "tied_sampling_ids" in batch:
             tied_sampling_inputs = _construct_tied_sampling_inputs(batch)
 
-            # slice to representative elements
+            # Slice to representative elements.
             unique_rep_idxs = tied_sampling_inputs["rep_idx"].unique().tolist()
             batch = slice_feats(batch, unique_rep_idxs)  # get representative batch elements
 
@@ -328,8 +331,15 @@ class AtomMPNNDenoiser(BaseSeqDenoiser):
                     x[unique_rep_idxs] for x in sampling_inputs["pos_restrict_aatype"]
                 ]
 
+            if sampling_inputs.get("symmetry_pos", None) is not None:
+                sampling_inputs["symmetry_pos"] = [sampling_inputs["symmetry_pos"][i] for i in unique_rep_idxs]
+
             # aggregate potts parameters across tied groups
             potts_decoder_aux = _aggregate_potts_params(potts_decoder_aux, tied_sampling_inputs)
+
+        # Handle symmetric decoding by folding the Potts parameters.
+        if sampling_inputs.get("symmetry_pos", None) is not None:
+            potts_decoder_aux = _fold_symmetry_pos(potts_decoder_aux, sampling_inputs["symmetry_pos"])
 
         return potts_decoder_aux, batch, sampling_inputs
 
@@ -458,3 +468,80 @@ def _generate_gaussian_conformers(
     # Mask out pad atoms and resolved atoms.
     batch["coords"] = batch["coords"] * batch["atom_pad_mask"].unsqueeze(-1) * batch["atom_resolved_mask"].unsqueeze(-1)
     return batch
+
+
+def _fold_symmetry_pos(
+    potts_decoder_aux: dict[str, TensorType["b ..."]], symmetry_pos: list[list[list[int]]]
+) -> dict[str, TensorType["b ..."]]:
+    """
+    Fold Potts parameters symmetrically at specified symmetry positions.
+    """
+    device = potts_decoder_aux["h"].device
+    B = potts_decoder_aux["h"].shape[0]
+    h, J, edge_idx, mask_i, mask_ij = (
+        potts_decoder_aux["h"],
+        potts_decoder_aux["J"],
+        potts_decoder_aux["edge_idx"],
+        potts_decoder_aux["mask_i"],
+        potts_decoder_aux["mask_ij"],
+    )
+
+    # Expand 2D features to dense format.
+    B, N, K, C, C = J.shape
+    if K != N:
+        edge_counts = mask_ij.new_zeros(B, N, N)
+        J_new = J.new_zeros(B, N, N, C, C)
+        for bi in range(B):
+            edge_indices_flat = (edge_idx[bi] + torch.arange(N, device=edge_idx.device)[:, None] * N).reshape(-1)
+            edge_counts[bi].view(-1).index_add_(0, edge_indices_flat, mask_ij[bi].view(-1))
+            J_new[bi].view(-1, C, C).index_add_(0, edge_indices_flat, J[bi].view(-1, C, C))
+        mask_ij = (edge_counts > 0) * (mask_i[:, :, None] * mask_i[:, None, :])
+        edge_idx = torch.arange(N, device=edge_idx.device).expand(1, 1, -1).repeat(B, N, 1)
+        J = J_new
+
+    # Fold Potts parameters at specified symmetry positions.
+    for bi in range(B):
+        symmetry_pos_bi = symmetry_pos[bi]
+        if len(symmetry_pos_bi) == 0:
+            continue
+
+        for symmetric_indices in symmetry_pos_bi:
+            indices = torch.tensor(symmetric_indices, device=device, dtype=torch.long)
+            dst_index = indices[0]
+            src_indices = indices[1:]
+
+            # Fold sitewise terms.
+            h[bi, dst_index] += h[bi, src_indices].sum(dim=0)
+            h[bi, src_indices] = 0
+            mask_i[bi, src_indices] = 0
+
+            # Fold pairwise terms.
+            J[bi, dst_index] += J[bi, src_indices].sum(dim=0)
+            J[bi, src_indices] = 0
+            J[bi, :, dst_index] += J[bi, :, src_indices].sum(dim=1)
+            J[bi, :, src_indices] = 0
+            mask_ij[bi, src_indices, :] = 0
+            mask_ij[bi, :, src_indices] = 0
+
+    potts_decoder_aux["h"] = h
+    potts_decoder_aux["J"] = J
+    potts_decoder_aux["edge_idx"] = edge_idx
+    potts_decoder_aux["mask_i"] = mask_i
+    potts_decoder_aux["mask_ij"] = mask_ij
+    return potts_decoder_aux
+
+
+def _unfold_symmetry_pos(S: TensorType["b n", int], symmetry_pos: list[list[int]]) -> TensorType["b n"]:
+    """
+    Unfold symmetry positions.
+    """
+    device = S.device
+    B, N = S.shape
+    for bi in range(B):
+        for symmetric_indices in symmetry_pos[bi]:
+            indices = torch.tensor(symmetric_indices, device=device, dtype=torch.long)
+            src_index = indices[0]
+            dst_indices = indices[1:]
+            for dst_index in dst_indices:
+                S[bi, dst_index] = S[bi, src_index]
+    return S

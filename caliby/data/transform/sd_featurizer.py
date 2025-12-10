@@ -5,7 +5,12 @@ import atomworks.constants as aw_const
 import numpy as np
 import torch
 from atomworks.constants import AF3_EXCLUDED_LIGANDS, STANDARD_AA, STANDARD_DNA, STANDARD_RNA
-from atomworks.ml.transforms.atom_array import AddGlobalTokenIdAnnotation, ComputeAtomToTokenMap
+from atomworks.ml.transforms.atom_array import (
+    AddGlobalTokenIdAnnotation,
+    AddWithinChainInstanceResIdx,
+    AddWithinPolyResIdxAnnotation,
+    ComputeAtomToTokenMap,
+)
 from atomworks.ml.transforms.base import (
     AddData,
     Compose,
@@ -114,6 +119,8 @@ def sd_featurizer(
         MaskAtomizedTokens(),
         RemoveUnsupportedChainTypes(),
         ErrIfAllUnresolved(),
+        AddWithinChainInstanceResIdx(),
+        AddWithinPolyResIdxAnnotation(),
     ]
 
     # Cropping

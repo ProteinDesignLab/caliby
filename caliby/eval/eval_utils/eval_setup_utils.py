@@ -311,7 +311,6 @@ def get_ensemble_constraint_df(
     Expand a pos_constraint_df to include all conformers
     """
     # expand pdb_key to all conformers
-    pos_constraint_df["pdb_key"] = pos_constraint_df["pdb_key"]
     conformer_dfs = []
     for pdb_key in pos_constraint_df["pdb_key"].unique():
         if pdb_key not in pdb_to_processed_conformers:

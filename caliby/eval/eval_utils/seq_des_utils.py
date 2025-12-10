@@ -32,6 +32,35 @@ from caliby.data.transform.sd_featurizer import sd_featurizer
 from caliby.model.seq_denoiser.lit_sd_model import LitSeqDenoiser
 from caliby.model.seq_denoiser.sd_model import SeqDenoiser
 
+_VALID_POS_CONSTRAINT_COLUMNS = [
+    "pdb_key",
+    "fixed_pos_seq",
+    "fixed_pos_scn",
+    "fixed_pos_override_seq",
+    "pos_restrict_aatype",
+    "symmetry_pos",
+]
+
+
+def _validate_pos_constraint_df(pos_constraint_df: pd.DataFrame | None) -> pd.DataFrame | None:
+    """Validate that a pos_constraint_df has correctly specified columns and returns a properly formatted DataFrame."""
+    if pos_constraint_df is None:
+        return None
+
+    if not set(pos_constraint_df.columns).issubset(_VALID_POS_CONSTRAINT_COLUMNS):
+        raise ValueError(
+            f"Invalid columns in pos_constraint_df. Expected subset of {_VALID_POS_CONSTRAINT_COLUMNS}. "
+            f"Found: {pos_constraint_df.columns}"
+        )
+
+    # Set index to pdb key.
+    pos_constraint_df = pos_constraint_df.set_index("pdb_key")
+
+    # Set empty string to NaN for easier parsing.
+    pos_constraint_df = pos_constraint_df.replace("", np.nan)
+
+    return pos_constraint_df
+
 
 def get_seq_des_model(cfg: DictConfig, device: str) -> dict[str, Any]:
     """
@@ -85,19 +114,7 @@ def run_seq_des(
     Path(sample_out_dir).mkdir(parents=True, exist_ok=True)
 
     # Validate pos_constraint_df.
-    if pos_constraint_df is not None:
-        valid_columns = ["pdb_key", "fixed_pos_seq", "fixed_pos_scn", "fixed_pos_override_seq", "pos_restrict_aatype"]
-        if not set(pos_constraint_df.columns).issubset(valid_columns):
-            # Columns in input df must be a subset of valid columns.
-            raise ValueError(
-                f"Invalid columns in pos_constraint_df. Expected subset of {valid_columns}. "
-                f"Found: {pos_constraint_df.columns}"
-            )
-        # Set index to pdb name.
-        pos_constraint_df = pos_constraint_df.set_index("pdb_key")
-
-        # Set empty string to NaN for easier parsing.
-        pos_constraint_df = pos_constraint_df.replace("", np.nan)
+    pos_constraint_df = _validate_pos_constraint_df(pos_constraint_df)
 
     # Print omitted amino acids.
     if sampling_cfg.verbose and sampling_cfg.omit_aas is not None:
@@ -126,6 +143,11 @@ def run_seq_des(
             # Restrict aatype sampling at certain positions.
             sampling_inputs = OmegaConf.to_container(sampling_cfg, resolve=True)
             sampling_inputs["pos_restrict_aatype"] = parse_pos_restrict_aatype_info(
+                batch, pos_constraint_df, verbose=sampling_cfg.verbose
+            )
+
+            # Parse symmetry positions.
+            sampling_inputs["symmetry_pos"] = parse_symmetry_pos_info(
                 batch, pos_constraint_df, verbose=sampling_cfg.verbose
             )
 
@@ -181,18 +203,7 @@ def run_seq_des_ensemble(
     Path(sample_out_dir).mkdir(parents=True, exist_ok=True)
 
     # Validate pos_constraint_df.
-    if pos_constraint_df is not None:
-        valid_columns = ["pdb_key", "fixed_pos_seq", "fixed_pos_scn", "fixed_pos_override_seq", "pos_restrict_aatype"]
-        if not set(pos_constraint_df.columns).issubset(valid_columns):
-            # Columns in input df must be a subset of valid columns.
-            raise ValueError(
-                f"Invalid columns in pos_constraint_df. Expected subset of {valid_columns}. Found: {pos_constraint_df.columns}"
-            )
-        # Set index to pdb name.
-        pos_constraint_df = pos_constraint_df.set_index("pdb_key")
-
-        # Set empty string to NaN for easier parsing.
-        pos_constraint_df = pos_constraint_df.replace("", np.nan)
+    pos_constraint_df = _validate_pos_constraint_df(pos_constraint_df)
 
     # Print omitted amino acids.
     if sampling_cfg.verbose and sampling_cfg.omit_aas is not None:
@@ -237,6 +248,11 @@ def run_seq_des_ensemble(
             # Restrict aatype sampling at certain positions.
             sampling_inputs = OmegaConf.to_container(sampling_cfg, resolve=True)
             sampling_inputs["pos_restrict_aatype"] = parse_pos_restrict_aatype_info(
+                batch, pos_constraint_df, verbose=sampling_cfg.verbose
+            )
+
+            # Parse symmetry positions.
+            sampling_inputs["symmetry_pos"] = parse_symmetry_pos_info(
                 batch, pos_constraint_df, verbose=sampling_cfg.verbose
             )
 
@@ -670,6 +686,69 @@ def parse_pos_restrict_aatype_info(
     return restrict_pos_mask, allowed_aatype_mask
 
 
+def parse_symmetry_pos_info(
+    batch: dict[str, TensorType["b ..."]], pos_constraint_df: pd.DataFrame | None, verbose: bool = False
+) -> list[list[int]] | None:
+    """
+    Given a pos_constraint_df containing symmetry positions for each PDB, return a list of lists of absolute positions.
+    Each inner list contains positions that should be sampled symmetrically.
+
+    The pos_constraint_df should have the following format:
+    index: PDB name (not including extension)
+    columns: ["symmetry_pos"]
+    where each entry is a string in the format "A15,B15|A16,B16|A17,B17", or np.nan.
+    Groups are separated by "|" and positions within a group are separated by ",".
+    """
+    if pos_constraint_df is None:
+        if verbose:
+            print("No symmetry positions specified.")
+        return None
+
+    # Cache symmetry positions by tied sampling id to avoid re-parsing.
+    tied_sampling_id_cache = {}
+
+    batch_symmetry_pos = []
+    for i, example_id in enumerate(batch["example_id"]):
+        if example_id not in pos_constraint_df.index:
+            if verbose:
+                print(f"{example_id}: No symmetry positions specified.")
+            batch_symmetry_pos.append([])
+            continue
+
+        # Get symmetry positions from df.
+        row = pos_constraint_df.loc[example_id]
+        symmetry_pos_str = row.get("symmetry_pos", np.nan)
+
+        if pd.isna(symmetry_pos_str):
+            if verbose:
+                print(f"{example_id}: No symmetry positions specified.")
+            batch_symmetry_pos.append([])
+            continue
+
+        # Set up example.
+        example = {k: v[i] for k, v in batch.items()}
+
+        if verbose:
+            print(f"{example_id}: Parsing symmetry positions {symmetry_pos_str}")
+
+        # Parse the symmetry position string.
+        tied_sampling_id = None
+        if "tied_sampling_ids" in example:
+            # Handle caching of symmetry positions by tied sampling id.
+            tied_sampling_id = example["tied_sampling_ids"].item()
+            if tied_sampling_id not in tied_sampling_id_cache:
+                tied_sampling_id_cache[tied_sampling_id] = parse_symmetry_pos_str(
+                    symmetry_pos_str, example["atom_array"]
+                )
+            symmetry_pos = tied_sampling_id_cache[tied_sampling_id]
+        else:
+            # No tied sampling ids, just parse the symmetry positions.
+            symmetry_pos = parse_symmetry_pos_str(symmetry_pos_str, example["atom_array"])
+
+        batch_symmetry_pos.append(symmetry_pos)
+    return batch_symmetry_pos
+
+
 def parse_fixed_pos_str(fixed_pos_str: str, atom_array: AtomArray) -> TensorType["k", int]:
     """
     Parse a list of fixed positions in the format ["A", "B1", "C10-25", ...] and
@@ -827,6 +906,20 @@ def parse_pos_restrict_aatype_str(
     abs_pos = parse_fixed_pos_str(",".join(pdb_pos), atom_array)
 
     return pdb_pos, abs_pos, allowed_aatypes
+
+
+def parse_symmetry_pos_str(symmetry_pos_str: str, atom_array: AtomArray) -> list[list[int]]:
+    """
+    Parse a symmetry position string in the format "A15,B15|A16,B16|A17,B17" into a list of lists of absolute positions.
+    Each group of positions denotes positions to be sampled symmetrically.
+    """
+    if not symmetry_pos_str or symmetry_pos_str.strip() == "":
+        return []
+
+    symmetry_pos = []
+    for group in symmetry_pos_str.split("|"):
+        symmetry_pos.append(parse_fixed_pos_str(group.strip(), atom_array))
+    return symmetry_pos
 
 
 def visualize_conditioning_sequences(
