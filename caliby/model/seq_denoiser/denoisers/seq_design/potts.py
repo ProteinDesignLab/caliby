@@ -451,6 +451,8 @@ def compute_potts_energy(
     h: torch.Tensor,
     J: torch.Tensor,
     edge_idx: torch.LongTensor,
+    mask_i: torch.Tensor | None,
+    mask_ij: torch.Tensor | None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Compute Potts model energies from sequence.
 
@@ -462,6 +464,8 @@ def compute_potts_energy(
             `(num_batch, num_nodes, num_neighbors, num_states, num_states)`.
         edge_idx (torch.LongTensor): Edge indices with shape
             `(num_batch, num_nodes, num_neighbors)`.
+        mask_i (torch.Tensor): Node mask with shape `(num_batch, num_nodes)`.
+        mask_ij (torch.Tensor): Edge mask with shape `(num_batch, num_nodes, num_neighbors)`.
 
     Returns:
         U (torch.Tensor): Potts total energies with shape `(num_batch)`.
@@ -469,6 +473,12 @@ def compute_potts_energy(
         U_i (torch.Tensor): Potts local conditional energies with shape
             `(num_batch, num_nodes, num_states)`.
     """
+    # Mask out nodes and edges that are not present.
+    if mask_i is not None:
+        h = h * mask_i[..., None]
+    if mask_ij is not None:
+        J = J * mask_ij[..., None, None]
+
     S_j = graph.collect_neighbors(S.unsqueeze(-1), edge_idx)
     S_j = S_j.unsqueeze(-1).expand(-1, -1, -1, h.shape[-1], -1)
     J_ij = torch.gather(J, -1, S_j).squeeze(-1)
@@ -629,6 +639,8 @@ def sample_potts(
             h,
             J,
             edge_idx,
+            mask_i,
+            mask_ij,
             T=_T,
             penalty_func=penalty_func,
             differentiable_penalty=differentiable_penalty,
@@ -639,6 +651,8 @@ def sample_potts(
             h,
             J,
             edge_idx,
+            mask_i,
+            mask_ij,
             T=_T,
             penalty_func=penalty_func,
             differentiable_penalty=differentiable_penalty,
@@ -697,7 +711,7 @@ def sample_potts(
             S_trajectory.append(S)
             U_trajectory.append(U)
 
-        U, _ = compute_potts_energy(S, h, J, edge_idx)
+        U, _ = compute_potts_energy(S, h, J, edge_idx, mask_i, mask_ij)
 
     if verbose:
         print(f"Effective number of sweeps: {cumulative_sweeps}")
@@ -780,8 +794,8 @@ def init_sampling_masks(
     return mask_S, mask_S_1D, S
 
 
-def _potts_proposal_gibbs(S, h, J, edge_idx, T=1.0, penalty_func=None, differentiable_penalty=True):
-    U, U_i = compute_potts_energy(S, h, J, edge_idx)
+def _potts_proposal_gibbs(S, h, J, edge_idx, mask_i, mask_ij, T=1.0, penalty_func=None, differentiable_penalty=True):
+    U, U_i = compute_potts_energy(S, h, J, edge_idx, mask_i, mask_ij)
 
     if penalty_func is not None:
         if differentiable_penalty:
@@ -805,6 +819,8 @@ def _potts_proposal_dlmc(
     h,
     J,
     edge_idx,
+    mask_i,
+    mask_ij,
     T=1.0,
     penalty_func=None,
     differentiable_penalty=True,
@@ -813,7 +829,7 @@ def _potts_proposal_dlmc(
     balancing_func="sigmoid",
 ):
     # Compute energy gap
-    U, U_i = compute_potts_energy(S, h, J, edge_idx)
+    U, U_i = compute_potts_energy(S, h, J, edge_idx, mask_i, mask_ij)
     # print(U)
     U_i = U_i
     if penalty_func is not None:
