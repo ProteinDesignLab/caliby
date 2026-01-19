@@ -5,6 +5,7 @@ num_workers: 8  # for dataloading
 # Inputs
 ckpt_path: null
 out_dir: null
+save_local_conditionals: false
 
 # PDB file inputs
 input_cfg:

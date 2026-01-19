@@ -119,7 +119,7 @@ class SeqDenoiser(nn.Module):
             batch["example_id"][bi]: {
                 "atom_array": batch["atom_array"][bi],
                 "U": U[bi].cpu().item(),
-                "U_i": U_i[bi].cpu(),
+                "U_i": U_i[bi][batch["token_pad_mask"][bi].bool()].cpu(),
             }
             for bi in range(len(batch["example_id"]))
         }

@@ -104,6 +104,8 @@ All sequence design scripts automatically save the global energy of the sequence
 
 You can also score a sequence against an ensemble of backbones via `examples/scripts/score_ensemble.sh`, where the ensembles should be provided in the same format as described in the previous section. When scoring a sequence against an ensemble, the sequence corresponding to the primary conformer will be scored, and the sequences of the additional conformers will be ignored.
 
+When scoring proteins, you can also save residue-level conditional energies by setting `save_local_conditionals=true` when running scoring scripts. This will save `.npy` files containing outputs of shape `(N, 32)` for each scored example, where N is the length of the protein and 32 is our vocabulary size. These can be interpreted as the conditional energy for each possible amino acid at position i, assuming all other positions are fixed (note that lower energy = more favorable). To see which tokens correspond to which indices, you can run `import caliby.data.const as const; print(const.AF3_ENCODING.token_to_idx)`. Note that we don’t use the non-protein tokens in the vocabulary, so you should only look at the 21 tokens given by `const.AF3_ENCODING.protein_tokens`.
+
 ## Additional sequence design options
 
 All sequence design options can be found in `caliby/configs/seq_des/atom_mpnn_inference.yaml`. These options can be overridden from `seq_des_multi.sh` and `seq_des_multi_ensemble.sh` via the `sampling_cfg_overrides` argument using hydra override syntax, e.g. `++sampling_cfg_overrides.omit_aas=["C"]` or `++sampling_cfg_overrides.potts_sampling_cfg.potts_sweeps=5000`.

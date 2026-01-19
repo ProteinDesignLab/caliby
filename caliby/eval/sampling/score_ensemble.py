@@ -2,6 +2,7 @@ from pathlib import Path
 
 import hydra
 import lightning as L
+import numpy as np
 import pandas as pd
 import torch
 import yaml
@@ -56,6 +57,11 @@ def main(cfg: DictConfig):
         pdb_to_conformers=pdb_to_conformers,
         device=device,
     )
+
+    if cfg.save_local_conditionals:
+        Path(f"{out_dir}/local_conditionals").mkdir(parents=True, exist_ok=True)
+        for example_id, U_i in zip(outputs["example_id"], outputs["U_i"]):
+            np.save(f"{out_dir}/local_conditionals/{example_id}.npy", U_i.cpu().numpy())
 
     # Parse score outputs into a flattened dataframe
     output_df = pd.DataFrame(
