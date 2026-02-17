@@ -11,7 +11,7 @@ Both this repository and Caliby are still under active development, so please re
 
 # Table of Contents
 - [Installation](#installation)
-  - [Option 1: Basic `uv` installation (preferred)](#option-1-basic-uv-installation-preferred)
+  - [Option 1: uv installation (preferred)](#option-1-uv-installation-preferred)
   - [Option 2: Apptainer installation](#option-2-apptainer-installation)
 - [Download model weights](#download-model-weights)
 - [Usage](#usage)
@@ -33,7 +33,7 @@ Both this repository and Caliby are still under active development, so please re
 # Installation
 Follow the below instructions for setting up the environment. After you've installed the environment, edit `env_setup.sh` to point to your environment directory, and run `source env_setup.sh` before running any scripts (see example scripts in `examples/scripts`).
 
-## Option 1: Basic `uv` installation (preferred)
+## Option 1: uv installation (preferred)
 To run the scripts in this repository, we recommend using `uv` for package management. If you don't already have `uv` installed, follow the official installation instructions [here](https://docs.astral.sh/uv/getting-started/installation/#installation-methods).
 
 Then, run the following commands to install the dependencies:
@@ -46,10 +46,9 @@ cd caliby
 ENV_DIR=envs  # or any other directory of your choice
 mkdir -p ${ENV_DIR}
 uv venv ${ENV_DIR}/caliby -p python3.12
-source $ENV_DIR/caliby/bin/activate
+source ${ENV_DIR}/caliby/bin/activate
 
-# Install the dependencies.
-uv pip sync uv_indexes.txt uv.lock -c pins.txt --index-strategy=unsafe-best-match
+# Install Caliby.
 uv pip install -e .
 ```
 

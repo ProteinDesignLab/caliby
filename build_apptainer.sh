@@ -23,6 +23,5 @@ fi
 
 uv venv ${ENV_DIR}/caliby -p python3.12
 source ${ENV_DIR}/caliby/bin/activate
-uv pip sync uv_indexes.txt uv.lock -c pins.txt --index-strategy=unsafe-best-match
 uv pip install -e .
 '
