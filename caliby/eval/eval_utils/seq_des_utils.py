@@ -4,7 +4,6 @@ Utils for sampling from sequence design models.
 
 import re
 from collections import defaultdict
-from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +17,6 @@ from atomworks.io.utils import non_rcsb
 from atomworks.io.utils.io_utils import to_cif_string
 from atomworks.ml.utils.token import apply_token_wise, get_token_starts, spread_token_wise
 from biotite.structure import AtomArray
-from joblib import Parallel, delayed
 from omegaconf import DictConfig, OmegaConf
 from torchtyping import TensorType
 from tqdm import tqdm
@@ -29,6 +27,7 @@ from caliby.data.data import to
 from caliby.data.datasets.atomworks_sd_dataset import sd_collator
 from caliby.data.transform.preprocess import preprocess_transform
 from caliby.data.transform.sd_featurizer import sd_featurizer
+from caliby.eval.eval_utils.inference_dataloader import InferenceDataLoader
 from caliby.model.seq_denoiser.lit_sd_model import LitSeqDenoiser
 from caliby.model.seq_denoiser.sd_model import SeqDenoiser
 
@@ -120,65 +119,68 @@ def run_seq_des(
     if sampling_cfg.verbose and sampling_cfg.omit_aas is not None:
         print(f"Omitting aatype sampling for: {sampling_cfg.omit_aas}")
 
-    # Process PDBs in parallel.
-    parallel_context = Parallel(n_jobs=sampling_cfg.num_workers) if sampling_cfg.num_workers > 1 else nullcontext()
+    # Load PDBs with prefetching.
+    loader = InferenceDataLoader(
+        pdb_paths,
+        data_cfg=data_cfg,
+        device=device,
+        batch_size=sampling_cfg.batch_size,
+        num_workers=sampling_cfg.num_workers,
+    )
 
     # Begin sampling.
     pbar = tqdm(
         total=len(pdb_paths),
         desc=f"Sampling {len(pdb_paths)} PDBs, {sampling_cfg.num_seqs_per_pdb} sequences per PDB...",
     )
-    with parallel_context as parallel_pool:
-        for i in range(0, len(pdb_paths), sampling_cfg.batch_size):
-            batch_pdb_paths = pdb_paths[i : i + sampling_cfg.batch_size]
-            B = len(batch_pdb_paths)
-            batch = get_sd_batch(batch_pdb_paths, data_cfg=data_cfg, device=device, parallel_pool=parallel_pool)
+    for batch in loader:
+        B = len(batch["example_id"])
 
-            # Initialize seq_cond and atom_cond masks.
-            batch = initialize_sampling_masks(batch)
+        # Initialize seq_cond and atom_cond masks.
+        batch = initialize_sampling_masks(batch)
 
-            # Parse fixed positions.
-            batch = parse_fixed_pos_info(batch, pos_constraint_df, verbose=sampling_cfg.verbose)
+        # Parse fixed positions.
+        batch = parse_fixed_pos_info(batch, pos_constraint_df, verbose=sampling_cfg.verbose)
 
-            # Restrict aatype sampling at certain positions.
-            sampling_inputs = OmegaConf.to_container(sampling_cfg, resolve=True)
-            sampling_inputs["pos_restrict_aatype"] = parse_pos_restrict_aatype_info(
-                batch, pos_constraint_df, verbose=sampling_cfg.verbose
-            )
+        # Restrict aatype sampling at certain positions.
+        sampling_inputs = OmegaConf.to_container(sampling_cfg, resolve=True)
+        sampling_inputs["pos_restrict_aatype"] = parse_pos_restrict_aatype_info(
+            batch, pos_constraint_df, verbose=sampling_cfg.verbose
+        )
 
-            # Parse symmetry positions.
-            sampling_inputs["symmetry_pos"] = parse_symmetry_pos_info(
-                batch, pos_constraint_df, verbose=sampling_cfg.verbose
-            )
+        # Parse symmetry positions.
+        sampling_inputs["symmetry_pos"] = parse_symmetry_pos_info(
+            batch, pos_constraint_df, verbose=sampling_cfg.verbose
+        )
 
-            # Run sampling.
-            id_to_atom_arrays, id_to_aux = model.sample(batch, sampling_inputs=sampling_inputs)
+        # Run sampling.
+        id_to_atom_arrays, id_to_aux = model.sample(batch, sampling_inputs=sampling_inputs)
 
-            # Save outputs.
-            for example_id, atom_arrays in id_to_atom_arrays.items():
-                aux = id_to_aux[example_id]
-                sample_stems = [f"{example_id}_sample{si}" for si in range(len(atom_arrays))]
+        # Save outputs.
+        for example_id, atom_arrays in id_to_atom_arrays.items():
+            aux = id_to_aux[example_id]
+            sample_stems = [f"{example_id}_sample{si}" for si in range(len(atom_arrays))]
 
-                # Save output atom arrays to cif files.
-                for si, sample_stem in enumerate(sample_stems):
-                    out_file = f"{sample_out_dir}/{sample_stem}.cif"
-                    atom_array = atom_arrays[si]
-                    with open(out_file, "w") as f:
-                        f.write(to_cif_string(atom_array, include_nan_coords=False))
+            # Save output atom arrays to cif files.
+            for si, sample_stem in enumerate(sample_stems):
+                out_file = f"{sample_out_dir}/{sample_stem}.cif"
+                atom_array = atom_arrays[si]
+                with open(out_file, "w") as f:
+                    f.write(to_cif_string(atom_array, include_nan_coords=False))
 
-                    outputs["example_id"].append(example_id)
-                    outputs["out_pdb"].append(out_file)
-                    outputs["U"].append(aux[si]["U"])
-                    outputs["input_seq"].append(aux[si]["input_seq"])
+                outputs["example_id"].append(example_id)
+                outputs["out_pdb"].append(out_file)
+                outputs["U"].append(aux[si]["U"])
+                outputs["input_seq"].append(aux[si]["input_seq"])
 
-                # Get sampled sequences as a string, with ":" to separate chains.
-                for si in range(len(atom_arrays)):
-                    chain_info = non_rcsb.initialize_chain_info_from_atom_array(atom_arrays[si])
-                    outputs["seq"].append(
-                        ":".join(info["processed_entity_canonical_sequence"] for info in chain_info.values())
-                    )
+            # Get sampled sequences as a string, with ":" to separate chains.
+            for si in range(len(atom_arrays)):
+                chain_info = non_rcsb.initialize_chain_info_from_atom_array(atom_arrays[si])
+                outputs["seq"].append(
+                    ":".join(info["processed_entity_canonical_sequence"] for info in chain_info.values())
+                )
 
-            pbar.update(B)
+        pbar.update(B)
     pbar.close()
 
     return outputs
@@ -210,79 +212,86 @@ def run_seq_des_ensemble(
     if sampling_cfg.verbose and sampling_cfg.omit_aas is not None:
         print(f"Omitting aatype sampling for: {sampling_cfg.omit_aas}")
 
-    # Process PDBs in parallel.
-    parallel_context = Parallel(n_jobs=sampling_cfg.num_workers) if sampling_cfg.num_workers > 1 else nullcontext()
+    # Load PDBs with prefetching (each batch = all conformers for one PDB).
+    loader = InferenceDataLoader.from_conformers(
+        pdb_to_conformers,
+        data_cfg=data_cfg,
+        device=device,
+        num_workers=sampling_cfg.num_workers,
+    )
 
     # Begin sampling.
-    with parallel_context as parallel_pool:
-        for pdb_name, pdb_paths in tqdm(
-            pdb_to_conformers.items(),
-            desc=f"Sampling {len(pdb_to_conformers)} PDBs, {sampling_cfg.num_seqs_per_pdb} sequences per PDB...",
-        ):
-            # Create tied_sampling_ids by tying all samples together.
-            batch = get_sd_batch(pdb_paths, device=device, data_cfg=data_cfg, parallel_pool=parallel_pool)
-            batch["tied_sampling_ids"] = torch.zeros(len(pdb_paths), device=device, dtype=torch.long)
+    for batch in tqdm(
+        loader,
+        total=len(loader),
+        desc=f"Sampling {len(pdb_to_conformers)} PDBs, {sampling_cfg.num_seqs_per_pdb} sequences per PDB...",
+    ):
+        num_conformers = len(batch["example_id"])
+        # Create tied_sampling_ids by tying all samples together.
+        batch["tied_sampling_ids"] = torch.zeros(num_conformers, device=device, dtype=torch.long)
 
-            # Use res_type from primary structure
-            if use_primary_res_type:
-                # Update restype in batch.
-                batch["restype"] = batch["restype"][0:1].expand(len(pdb_paths), *((batch["restype"].ndim - 1) * (-1,)))
-
-                # Update atom array annotations.
-                for i in range(1, len(batch["atom_array"])):
-                    atomwise_resnames = spread_token_wise(
-                        batch["atom_array"][i],
-                        const.AF3_ENCODING.idx_to_token[batch["restype"][0].argmax(dim=-1).cpu().numpy()],
-                    )
-                    batch["atom_array"][i].set_annotation("res_name", atomwise_resnames)
-
-            # Ensure that all entries in the batch have the same residue and chain index so that they're aligned.
-            if not sampling_cfg["ensemble_ignore_res_idx_mismatch"]:
-                _validate_ensemble_alignment(batch)
-
-            # Initialize seq_cond and atom_cond masks.
-            batch = initialize_sampling_masks(batch)
-
-            # Parse fixed positions.
-            batch = parse_fixed_pos_info(batch, pos_constraint_df, verbose=sampling_cfg.verbose)
-
-            # Restrict aatype sampling at certain positions.
-            sampling_inputs = OmegaConf.to_container(sampling_cfg, resolve=True)
-            sampling_inputs["pos_restrict_aatype"] = parse_pos_restrict_aatype_info(
-                batch, pos_constraint_df, verbose=sampling_cfg.verbose
+        # Use res_type from primary structure
+        if use_primary_res_type:
+            # Update restype in batch.
+            batch["restype"] = batch["restype"][0:1].expand(
+                num_conformers, *((batch["restype"].ndim - 1) * (-1,))
             )
 
-            # Parse symmetry positions.
-            sampling_inputs["symmetry_pos"] = parse_symmetry_pos_info(
-                batch, pos_constraint_df, verbose=sampling_cfg.verbose
-            )
+            # Update atom array annotations.
+            for i in range(1, len(batch["atom_array"])):
+                atomwise_resnames = spread_token_wise(
+                    batch["atom_array"][i],
+                    const.AF3_ENCODING.idx_to_token[batch["restype"][0].argmax(dim=-1).cpu().numpy()],
+                )
+                batch["atom_array"][i].set_annotation("res_name", atomwise_resnames)
 
-            # Run sampling.
-            id_to_atom_arrays, id_to_aux = model.sample(batch, sampling_inputs=sampling_inputs)
+        # Ensure that all entries in the batch have the same residue and chain index so that they're aligned.
+        if not sampling_cfg["ensemble_ignore_res_idx_mismatch"]:
+            _validate_ensemble_alignment(batch)
 
-            # Save outputs.
-            for example_id, atom_arrays in id_to_atom_arrays.items():
-                aux = id_to_aux[example_id]
-                sample_stems = [f"{example_id}_sample{si}" for si in range(len(atom_arrays))]
+        # Initialize seq_cond and atom_cond masks.
+        batch = initialize_sampling_masks(batch)
 
-                # Save output atom arrays to cif files.
-                for si in range(len(atom_arrays)):
-                    out_file = f"{sample_out_dir}/{sample_stems[si]}.cif"
-                    atom_array = atom_arrays[si]
-                    with open(out_file, "w") as f:
-                        f.write(to_cif_string(atom_array, include_nan_coords=False))
+        # Parse fixed positions.
+        batch = parse_fixed_pos_info(batch, pos_constraint_df, verbose=sampling_cfg.verbose)
 
-                    outputs["example_id"].append(example_id)
-                    outputs["out_pdb"].append(out_file)
-                    outputs["U"].append(aux[si]["U"])
-                    outputs["input_seq"].append(aux[si]["input_seq"])
+        # Restrict aatype sampling at certain positions.
+        sampling_inputs = OmegaConf.to_container(sampling_cfg, resolve=True)
+        sampling_inputs["pos_restrict_aatype"] = parse_pos_restrict_aatype_info(
+            batch, pos_constraint_df, verbose=sampling_cfg.verbose
+        )
 
-                # Get sampled sequences as a string, with ":" to separate chains.
-                for si in range(len(atom_arrays)):
-                    chain_info = non_rcsb.initialize_chain_info_from_atom_array(atom_arrays[si])
-                    outputs["seq"].append(
-                        ":".join(info["processed_entity_canonical_sequence"] for info in chain_info.values())
-                    )
+        # Parse symmetry positions.
+        sampling_inputs["symmetry_pos"] = parse_symmetry_pos_info(
+            batch, pos_constraint_df, verbose=sampling_cfg.verbose
+        )
+
+        # Run sampling.
+        id_to_atom_arrays, id_to_aux = model.sample(batch, sampling_inputs=sampling_inputs)
+
+        # Save outputs.
+        for example_id, atom_arrays in id_to_atom_arrays.items():
+            aux = id_to_aux[example_id]
+            sample_stems = [f"{example_id}_sample{si}" for si in range(len(atom_arrays))]
+
+            # Save output atom arrays to cif files.
+            for si in range(len(atom_arrays)):
+                out_file = f"{sample_out_dir}/{sample_stems[si]}.cif"
+                atom_array = atom_arrays[si]
+                with open(out_file, "w") as f:
+                    f.write(to_cif_string(atom_array, include_nan_coords=False))
+
+                outputs["example_id"].append(example_id)
+                outputs["out_pdb"].append(out_file)
+                outputs["U"].append(aux[si]["U"])
+                outputs["input_seq"].append(aux[si]["input_seq"])
+
+            # Get sampled sequences as a string, with ":" to separate chains.
+            for si in range(len(atom_arrays)):
+                chain_info = non_rcsb.initialize_chain_info_from_atom_array(atom_arrays[si])
+                outputs["seq"].append(
+                    ":".join(info["processed_entity_canonical_sequence"] for info in chain_info.values())
+                )
 
     return outputs
 
@@ -301,35 +310,38 @@ def score_samples(
     # Set up outputs.
     outputs = defaultdict(list)
 
-    # Process PDBs in parallel.
+    # Load PDBs with prefetching.
+    loader = InferenceDataLoader(
+        pdb_paths,
+        data_cfg=data_cfg,
+        device=device,
+        batch_size=sampling_cfg.batch_size,
+        num_workers=sampling_cfg.num_workers,
+    )
     pbar = tqdm(total=len(pdb_paths), desc=f"Scoring {len(pdb_paths)} PDBs...")
-    parallel_context = Parallel(n_jobs=sampling_cfg.num_workers) if sampling_cfg.num_workers > 1 else nullcontext()
 
     # Begin scoring.
-    with parallel_context as parallel_pool:
-        for i in range(0, len(pdb_paths), sampling_cfg.batch_size):
-            batch_pdb_paths = pdb_paths[i : i + sampling_cfg.batch_size]
-            B = len(batch_pdb_paths)
-            batch = get_sd_batch(batch_pdb_paths, device=device, data_cfg=data_cfg, parallel_pool=parallel_pool)
+    for batch in loader:
+        B = len(batch["example_id"])
 
-            # Initialize seq_cond and atom_cond masks.
-            batch = initialize_sampling_masks(batch)
+        # Initialize seq_cond and atom_cond masks.
+        batch = initialize_sampling_masks(batch)
 
-            # Score samples.
-            sampling_inputs = OmegaConf.to_container(sampling_cfg, resolve=True)
-            id_to_aux = model.score_samples(batch, sampling_inputs=sampling_inputs)
+        # Score samples.
+        sampling_inputs = OmegaConf.to_container(sampling_cfg, resolve=True)
+        id_to_aux = model.score_samples(batch, sampling_inputs=sampling_inputs)
 
-            # Store results.
-            for example_id, aux in id_to_aux.items():
-                outputs["example_id"].append(example_id)
-                chain_info = non_rcsb.initialize_chain_info_from_atom_array(aux["atom_array"])
-                outputs["seq"].append(
-                    ":".join(info["processed_entity_canonical_sequence"] for info in chain_info.values())
-                )
-                outputs["U"].append(aux["U"])
-                outputs["U_i"].append(aux["U_i"])
+        # Store results.
+        for example_id, aux in id_to_aux.items():
+            outputs["example_id"].append(example_id)
+            chain_info = non_rcsb.initialize_chain_info_from_atom_array(aux["atom_array"])
+            outputs["seq"].append(
+                ":".join(info["processed_entity_canonical_sequence"] for info in chain_info.values())
+            )
+            outputs["U"].append(aux["U"])
+            outputs["U_i"].append(aux["U_i"])
 
-            pbar.update(B)
+        pbar.update(B)
     pbar.close()
 
     return outputs
@@ -348,52 +360,51 @@ def score_samples_ensemble(
     """
     outputs = defaultdict(list)
 
-    # Process PDBs in parallel.
-    parallel_context = Parallel(n_jobs=sampling_cfg.num_workers) if sampling_cfg.num_workers > 1 else nullcontext()
-    with parallel_context as parallel_pool:
-        for pdb_name, pdb_paths in tqdm(pdb_to_conformers.items(), desc=f"Scoring {len(pdb_to_conformers)} PDBs..."):
-            # Create tied_sampling_ids by tying all samples together.
-            batch = get_sd_batch(pdb_paths, device=device, data_cfg=data_cfg, parallel_pool=parallel_pool)
-            batch["tied_sampling_ids"] = torch.zeros(len(pdb_paths), device=device, dtype=torch.long)
+    # Load PDBs with prefetching (each batch = all conformers for one PDB).
+    loader = InferenceDataLoader.from_conformers(
+        pdb_to_conformers,
+        data_cfg=data_cfg,
+        device=device,
+        num_workers=sampling_cfg.num_workers,
+    )
+    for batch in tqdm(loader, total=len(loader), desc=f"Scoring {len(pdb_to_conformers)} PDBs..."):
+        num_conformers = len(batch["example_id"])
+        # Create tied_sampling_ids by tying all samples together.
+        batch["tied_sampling_ids"] = torch.zeros(num_conformers, device=device, dtype=torch.long)
 
-            # Ensure that all entries in the batch have the same residue and chain index so that they're aligned.
-            if not sampling_cfg["ensemble_ignore_res_idx_mismatch"]:
-                _validate_ensemble_alignment(batch)
+        # Ensure that all entries in the batch have the same residue and chain index so that they're aligned.
+        if not sampling_cfg["ensemble_ignore_res_idx_mismatch"]:
+            _validate_ensemble_alignment(batch)
 
-            # Initialize seq_cond and atom_cond masks.
-            batch = initialize_sampling_masks(batch)
+        # Initialize seq_cond and atom_cond masks.
+        batch = initialize_sampling_masks(batch)
 
-            # Score samples.
-            sampling_inputs = OmegaConf.to_container(sampling_cfg, resolve=True)
-            id_to_aux = model.score_samples(batch, sampling_inputs=sampling_inputs)
+        # Score samples.
+        sampling_inputs = OmegaConf.to_container(sampling_cfg, resolve=True)
+        id_to_aux = model.score_samples(batch, sampling_inputs=sampling_inputs)
 
-            # Store results.
-            for example_id, aux in id_to_aux.items():
-                outputs["example_id"].append(example_id)
-                chain_info = non_rcsb.initialize_chain_info_from_atom_array(aux["atom_array"])
-                outputs["seq"].append(
-                    ":".join(info["processed_entity_canonical_sequence"] for info in chain_info.values())
-                )
-                outputs["U"].append(aux["U"])
-                outputs["U_i"].append(aux["U_i"])
+        # Store results.
+        for example_id, aux in id_to_aux.items():
+            outputs["example_id"].append(example_id)
+            chain_info = non_rcsb.initialize_chain_info_from_atom_array(aux["atom_array"])
+            outputs["seq"].append(
+                ":".join(info["processed_entity_canonical_sequence"] for info in chain_info.values())
+            )
+            outputs["U"].append(aux["U"])
+            outputs["U_i"].append(aux["U_i"])
 
     return outputs
 
 
 def get_sd_batch(
-    pdb_paths: list[str], *, data_cfg: DictConfig | None, device: str, parallel_pool: Parallel | None
+    pdb_paths: list[str], *, data_cfg: DictConfig | None, device: str
 ) -> dict[str, Any]:
     """
     Given a list of pdb file paths, return a batch of sequence design model features.
 
     If data_cfg is None, use default cif parser args.
     """
-    if parallel_pool is None:
-        # Load PDBs sequentially.
-        batch_examples = [get_sd_example(pdb_path, data_cfg) for pdb_path in pdb_paths]
-    else:
-        # Load PDBs in parallel.
-        batch_examples = parallel_pool(delayed(get_sd_example)(pdb_path, data_cfg) for pdb_path in pdb_paths)
+    batch_examples = [get_sd_example(pdb_path, data_cfg) for pdb_path in pdb_paths]
 
     # Collate examples.
     batch = sd_collator(batch_examples)
