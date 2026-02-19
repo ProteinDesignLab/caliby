@@ -66,6 +66,9 @@ def main(cfg: DictConfig):
         for save_dir in all_save_dirs:
             out_dir_i = f"{out_dir}/{save_dir.parent.name}"
             Path(out_dir_i).mkdir(parents=True, exist_ok=True)
+            dest_path = Path(out_dir_i) / save_dir.name
+            if dest_path.exists():
+                shutil.rmtree(dest_path)
             shutil.move(save_dir, out_dir_i)
 
 
