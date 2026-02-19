@@ -306,6 +306,10 @@ class AtomMPNNDenoiser(BaseSeqDenoiser):
             batch: dict[str, TensorType["b ..."]]: batch with token_exists_mask added
             sampling_inputs: dict[str, Any]: sampling inputs with pos_restrict_aatype sliced to representative elements
         """
+        # Aggregate on CPU to avoid memory usage scaling with ensemble size.
+        batch_device = batch["restype"].device
+        aggregate_device = "cpu"
+
         subbatch_size = sampling_inputs["batch_size"]
         B = batch["restype"].shape[0]
 
@@ -318,8 +322,8 @@ class AtomMPNNDenoiser(BaseSeqDenoiser):
             _, aux_preds_i = self(subbatch, is_sampling=True, sampling_inputs=sampling_inputs)
 
             for k, v in aux_preds_i["potts_decoder_aux"].items():
-                potts_decoder_aux.setdefault(k, []).append(v)
-            token_exists_mask.append(aux_preds_i["token_exists_mask"])
+                potts_decoder_aux.setdefault(k, []).append(v.to(aggregate_device))
+            token_exists_mask.append(aux_preds_i["token_exists_mask"].to(aggregate_device))
         potts_decoder_aux = {k: torch.cat(v, dim=0) for k, v in potts_decoder_aux.items()}
         token_exists_mask = torch.cat(token_exists_mask, dim=0)
         batch["token_exists_mask"] = token_exists_mask  # store in batch for downstream use
@@ -347,6 +351,10 @@ class AtomMPNNDenoiser(BaseSeqDenoiser):
         if sampling_inputs.get("symmetry_pos", None) is not None:
             potts_decoder_aux = _fold_symmetry_pos(potts_decoder_aux, sampling_inputs["symmetry_pos"])
 
+        # Move outputs back to batch device.
+        potts_decoder_aux = to(potts_decoder_aux, batch_device)
+        batch["token_exists_mask"] = to(batch["token_exists_mask"], batch_device)
+
         return potts_decoder_aux, batch, sampling_inputs
 
 
@@ -369,6 +377,7 @@ def _aggregate_potts_params(
         potts_decoder_aux["mask_ij"],
     )
     inverse, unique_ids = tied_sampling_inputs["inverse"], tied_sampling_inputs["unique_ids"]
+    inverse, unique_ids = inverse.to(h.device), unique_ids.to(h.device)
 
     # handle 1D features
     counts = torch.bincount(inverse)
