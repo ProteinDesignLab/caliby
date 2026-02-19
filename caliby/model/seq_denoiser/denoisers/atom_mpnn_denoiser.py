@@ -4,6 +4,7 @@ from typing import Any
 
 import numpy as np
 import torch
+from atomworks.io.utils import non_rcsb
 from atomworks.ml.utils.token import spread_token_wise
 from biotite.structure import AtomArray
 from omegaconf import DictConfig
@@ -260,6 +261,10 @@ class AtomMPNNDenoiser(BaseSeqDenoiser):
                 atom_cond_mask = batch["atom_cond_mask"][bi][atom_pad_mask]
                 atom_resolved_mask = batch["atom_resolved_mask"][bi][atom_pad_mask]
 
+                # Get original sequence.
+                chain_info = non_rcsb.initialize_chain_info_from_atom_array(atom_array)
+                input_seq = ":".join(info["processed_entity_canonical_sequence"] for info in chain_info.values())
+
                 # Update resnames.
                 update_seq_mask = ~seq_cond_mask.numpy().astype(bool)  # update where seq_cond_mask is False
                 atomwise_update_seq_mask = spread_token_wise(atom_array, update_seq_mask)
@@ -280,6 +285,7 @@ class AtomMPNNDenoiser(BaseSeqDenoiser):
                 id_to_aux[example_id].append(
                     {
                         "U": aux["U"][si][bi].cpu().item(),
+                        "input_seq": input_seq,
                         "S": new_restype.cpu(),
                     }
                 )

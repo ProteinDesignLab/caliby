@@ -169,6 +169,7 @@ def run_seq_des(
                     outputs["example_id"].append(example_id)
                     outputs["out_pdb"].append(out_file)
                     outputs["U"].append(aux[si]["U"])
+                    outputs["input_seq"].append(aux[si]["input_seq"])
 
                 # Get sampled sequences as a string, with ":" to separate chains.
                 for si in range(len(atom_arrays)):
@@ -274,6 +275,7 @@ def run_seq_des_ensemble(
                     outputs["example_id"].append(example_id)
                     outputs["out_pdb"].append(out_file)
                     outputs["U"].append(aux[si]["U"])
+                    outputs["input_seq"].append(aux[si]["input_seq"])
 
                 # Get sampled sequences as a string, with ":" to separate chains.
                 for si in range(len(atom_arrays)):
