@@ -23,7 +23,7 @@ def torch_rmsd_weighted(
     a: TensorType["b n x", float],
     b: TensorType["b n x", float],
     weights: TensorType["b n", float] | None,
-    return_aligned: bool = False,
+    return_aux: bool = False,
 ) -> TensorType["b", float]:
     """
     Compute weighted RMSD of coordinates after weighted alignment. Batched.
@@ -31,7 +31,10 @@ def torch_rmsd_weighted(
     For masked RMSD, set weights to 0 for masked atoms.
 
     Aligns a to b using Kabsch algorithm, then computes RMSD.
-    If return_aligned is True, returns the aligned structures as well.
+
+    If return_aux is True, returns:
+    - "aligned_a": the aligned coordinates of a
+    - "transforms": (R, t) such that a_aligned = a @ R + t
 
     Adapted from: https://github.com/sokrypton/ColabDesign/blob/main/colabdesign/af/loss.py#L445
     """
@@ -52,8 +55,12 @@ def torch_rmsd_weighted(
     weighted_msd = (W * ((aligned_a - b) ** 2)).sum(dim=(-1, -2))
     weighted_rmsd = torch.sqrt(weighted_msd + 1e-8)
 
-    if return_aligned:
-        return weighted_rmsd, (aligned_a, b)
+    if return_aux:
+        aux = {
+            "aligned_a": aligned_a,
+            "transforms": (R, b_mu - a_mu @ R),
+        }
+        return weighted_rmsd, aux
     return weighted_rmsd
 
 

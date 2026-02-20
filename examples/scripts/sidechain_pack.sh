@@ -4,6 +4,6 @@
 
 source env_setup.sh
 python3 caliby/eval/sampling/sidechain_pack.py \
-    ckpt_path=model_params/caliby/caliby_packer_010.ckpt \
+    ckpt_path=model_params/caliby/packing/caliby_packer_010.ckpt \
     input_cfg.pdb_dir=examples/example_data/native_pdbs \
     out_dir=examples/outputs/sidechain_pack

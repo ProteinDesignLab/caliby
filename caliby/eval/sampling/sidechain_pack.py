@@ -7,6 +7,7 @@ import torch
 import yaml
 from omegaconf import DictConfig, OmegaConf
 
+from caliby.eval.eval_utils import eval_metrics
 from caliby.eval.eval_utils.eval_setup_utils import get_pdb_files
 from caliby.eval.eval_utils.seq_des_utils import get_seq_des_model, run_sidechain_packing
 
@@ -52,9 +53,22 @@ def main(cfg: DictConfig):
     )
     del seq_des_model  # delete model to free up memory
 
-    # Save outputs to CSV
+    # Compute RMSD between packed sidechains and original sidechains.
+    id_to_metrics = eval_metrics.run_packing_metrics_eval(
+        input_pdbs=pdb_files,
+        pred_pdbs=outputs["out_pdb"],
+        out_dir=out_dir,
+        num_workers=cfg.num_workers,
+    )
+
+    metrics_df = pd.DataFrame([{"example_id": eid, **m} for eid, m in id_to_metrics.items()])
+
+    # Save outputs to CSV.
     output_df = pd.DataFrame(outputs)
-    output_df.to_csv(f"{out_dir}/sidechain_pack_outputs.csv", index=False)
+    output_df = pd.merge(
+        output_df, metrics_df, left_on="example_id", right_on="example_id", how="inner", validate="1:1"
+    )
+    output_df.to_csv(f"{out_dir}/packing_metrics.csv", index=False)
 
 
 if __name__ == "__main__":

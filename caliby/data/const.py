@@ -142,6 +142,13 @@ AF2_BB_ATOMS: Final[list[str]] = ["N", "CA", "C", "O"]
 AF2_BB_ATOM_ORDER: Final[dict[str, int]] = {atom: i for i, atom in enumerate(AF2_BB_ATOMS)}
 AF2_BB_IDXS: Final[list[int]] = [0, 1, 2, 4]
 AF2_SCN_IDXS: Final[list[int]] = [i for i in range(37) if i not in AF2_BB_IDXS]
+RES_NAME_TO_SYMMETRIC_CHI: Final[dict[str, list[int]]] = {
+    "ASP": [1],  # chi1
+    "GLU": [2],  # chi2
+    "PHE": [1],  # chi1
+    "TYR": [1],  # chi1
+}
+
 AF2_STANDARD_ATOM_MASK_WITH_X: np.ndarray[bool] = AF2_ATOM37_ENCODING.idx_to_atom != ""
 AF2_STANDARD_ATOM_MASK_WITH_X[:, -1] = False  # remove OXT atoms
 AF2_STANDARD_ATOM_MASK_WITH_X[AF2_ATOM37_ENCODING.token_to_idx["UNK"]][AF2_BB_IDXS] = (
