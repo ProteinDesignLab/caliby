@@ -1,0 +1,42 @@
+use_self_conditioning: true
+self_cond_p: 0.5
+training_batch_size_mult: 8  # batch size multiplier for diffusion module
+hidden_size: 256
+
+# Diffusion settings
+interpolant:
+  # Noise schedule
+  rho: 7
+  s_min: 0.01
+  s_max: 80
+
+  # Training noise distribution
+  training_noise_schedule: "lognormal"
+
+  training_noise_cfg:
+    lognormal:
+      psigma_mean: 1.5
+      psigma_std: 1.0
+    uniform_sigma:
+    uniform_t:
+      t_min: 0.0
+      t_max: 1.0
+    trunc_normal_t:
+      loc: 0.6
+      scale: 0.1
+      t_min: 0.0
+      t_max: 1.0
+    constant_t:
+      t: 1.0
+
+scn_denoiser:
+  use_self_conditioning: ${model.denoiser.scn_diffusion_module.use_self_conditioning}
+  self_cond_p: ${model.denoiser.scn_diffusion_module.self_cond_p}
+
+  c_h_V: ${denoiser.mpnn.n_channel}  # mpnn node conditioning
+
+  # Blocks
+  depth: 4
+  hidden_size: ${model.denoiser.scn_diffusion_module.hidden_size}
+  mlp_dropout: 0.0
+  mlp_ratio: 4.0

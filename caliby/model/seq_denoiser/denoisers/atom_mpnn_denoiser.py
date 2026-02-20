@@ -5,7 +5,9 @@ from typing import Any
 import numpy as np
 import torch
 from atomworks.io.utils import non_rcsb
-from atomworks.ml.utils.token import spread_token_wise
+from atomworks.ml.encoding_definitions import AF2_ATOM37_ENCODING
+from atomworks.ml.transforms import encoding as aw_encoding
+from atomworks.ml.utils.token import get_af3_token_center_idxs, spread_token_wise
 from biotite.structure import AtomArray
 from omegaconf import DictConfig
 from torchtyping import TensorType
@@ -16,7 +18,7 @@ import caliby.model.seq_denoiser.denoisers.seq_design.potts as potts
 from caliby.data.data import to
 from caliby.data.feature.feature_utils import slice_feats
 from caliby.model.seq_denoiser.denoisers.denoiser import BaseSeqDenoiser
-from caliby.model.seq_denoiser.denoisers.seq_design.atom_mpnn import AtomMPNN
+from caliby.model.seq_denoiser.denoisers.seq_design.atom_mpnn import AtomMPNN, add_atom14_feats
 from chroma.layers import complexity
 
 
@@ -32,7 +34,14 @@ class AtomMPNNDenoiser(BaseSeqDenoiser):
         self.augment_eps = cfg.augment_eps
 
         # Sequence design model: AtomMPNN
-        self.atom_mpnn = AtomMPNN(cfg.mpnn)
+        model_version = cfg.get("model_version", 0)
+        self.atom_mpnn = AtomMPNN(cfg.mpnn, model_version=model_version)
+
+        # Sidechain diffusion head
+        if self.task == "scn_pack":
+            from caliby.model.seq_denoiser.denoisers.scn_diffusion_module import SidechainDiffusionModule
+
+            self.scn_diffusion_module = SidechainDiffusionModule(cfg.scn_diffusion_module, self.scn_sigma_data)
 
     def forward(
         self,
@@ -46,12 +55,14 @@ class AtomMPNNDenoiser(BaseSeqDenoiser):
         # Build some helpful masks based on conditioning sequence and atoms.
         batch = self.build_masks(batch)
 
-        # During training, add random noise to input coordinates.
-        if not is_sampling:
-            batch = self.get_training_random_noise(batch)
+        # Add atom14 features to the batch.
+        add_atom14_feats(batch)
+
+        # During training, sample random noise for input coordinates.
+        batch = self.get_training_random_noise(batch)
 
         # Run model.
-        seq_logits, mpnn_feats = self.atom_mpnn(batch, is_sampling)
+        seq_logits, mpnn_feats = self.atom_mpnn(batch)
 
         # Outputs.
         aux_preds = {
@@ -61,6 +72,15 @@ class AtomMPNNDenoiser(BaseSeqDenoiser):
             "atom_cond_mask": batch["atom_cond_mask"],
             "token_exists_mask": batch["token_exists_mask"],
         }
+
+        # Run sidechain packing.
+        if self.task == "scn_pack":
+            aux_preds["scn_diffusion_aux"] = self.scn_diffusion_module.sidechain_diffusion(
+                mpnn_feats,
+                batch,
+                is_sampling=is_sampling,
+                sampling_inputs=sampling_inputs,
+            )
 
         return seq_logits, aux_preds
 
@@ -103,21 +123,16 @@ class AtomMPNNDenoiser(BaseSeqDenoiser):
         During training, adds random noise and noise labels for input coordinates.
 
         Updates batch (in place) with:
-        - noise: Tensor["b n_atoms 3", float]: random noise for each atom
+        - noise: Tensor["b n 14 3", float]: random noise for each atom14 coord
         """
-        if not self.training or self.augment_eps <= 0:
-            # if not training or no noise, and not provided, then we assume no noise
-            batch["noise"] = batch.get("noise", None)
+        if not self.training:
+            if batch.get("noise", None) is None:
+                # If not training and noise is not provided, then we assume no noise.
+                batch["noise"] = torch.zeros_like(batch["atom14_coords"])
             return batch
 
-        ## Training: choose random backbone noise ##
-        B, N_atoms = batch["atom_pad_mask"].shape
-        device = batch["atom_pad_mask"].device
-
-        # global noise, similar to ProteinMPNN
-        # add randomly sampled noise to input
-        noise = self.augment_eps * torch.randn((B, N_atoms, 3), device=device)
-
+        # Training: choose random backbone noise similar to ProteinMPNN.
+        noise = self.augment_eps * torch.randn_like(batch["atom14_coords"])
         batch["noise"] = noise
         return batch
 
@@ -356,6 +371,50 @@ class AtomMPNNDenoiser(BaseSeqDenoiser):
         batch["token_exists_mask"] = to(batch["token_exists_mask"], batch_device)
 
         return potts_decoder_aux, batch, sampling_inputs
+
+    def sidechain_pack(self, batch: dict[str, TensorType["b ..."]], sampling_inputs: dict[str, Any]) -> list[AtomArray]:
+        """
+        Run sidechain packing.
+
+        Returns:
+            atom_arrays: list of AtomArrays with packed sidechains
+        """
+        _, aux_preds = self(batch, is_sampling=True, sampling_inputs=sampling_inputs)
+        encoded_xyz_packed = aux_preds["scn_diffusion_aux"]["encoded_xyz_packed"]
+        encoded_mask_packed = aux_preds["scn_diffusion_aux"]["encoded_mask_packed"]
+        atom_arrays = []
+        for bi in range(len(encoded_xyz_packed)):
+            token_pad_mask = batch["token_pad_mask"][bi].bool()
+
+            # Copy over relevant token-level annotations from the original atom array.
+            orig_atom_array = batch["atom_array"][bi]
+            orig_toks = orig_atom_array[get_af3_token_center_idxs(orig_atom_array)]
+            chain_id = orig_toks.chain_id
+            other_annotations = {
+                "res_id": orig_toks.res_id,
+                "chain_iid": orig_toks.chain_iid,
+                "chain_entity": orig_toks.chain_entity,
+                "is_polymer": orig_toks.is_polymer,
+                "chain_type": orig_toks.chain_type,
+            }
+
+            # Construct new atom array.
+            atom_array = aw_encoding.atom_array_from_encoding(
+                encoded_coord=encoded_xyz_packed[bi][token_pad_mask],
+                encoded_mask=encoded_mask_packed[bi][token_pad_mask],
+                encoded_seq=batch["encoded_seq"][bi][token_pad_mask],
+                encoding=AF2_ATOM37_ENCODING,
+                chain_id=chain_id,
+                **other_annotations,
+            )
+
+            # Handle res_name annotation typing issues.
+            res_names = atom_array.res_name.astype('<U5')
+            atom_array.del_annotation("res_name")
+            atom_array.set_annotation("res_name", res_names)
+            atom_arrays.append(atom_array)
+
+        return atom_arrays
 
 
 def _aggregate_potts_params(

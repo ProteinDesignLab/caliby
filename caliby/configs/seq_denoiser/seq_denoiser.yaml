@@ -125,6 +125,7 @@ loss:
   loss_weights:
     seq_loss: 1.0
     potts_composite_loss: 1.0
+    scn_mse_loss: 1.0
 
   # loss configs
   seq_loss:
@@ -134,6 +135,9 @@ loss:
   potts:
     label_smoothing: 0.1
     per_token_avg: false
+
+  scn_mse_loss:
+    per_token_avg: true
 
 optim:
   optimizer: "noam"

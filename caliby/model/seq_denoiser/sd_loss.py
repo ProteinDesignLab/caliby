@@ -3,11 +3,12 @@ import logging
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from einops import repeat
 from omegaconf import DictConfig
 from torchtyping import TensorType
 
+import caliby.data.const as const
 import caliby.model.seq_denoiser.denoisers.seq_design.potts as potts
-from caliby.data import const
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,8 @@ class SDLoss(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.task = cfg.task
-        self.use_seq_pred = self.task in ["seq_des"]
+        self.use_seq_pred = self.task in ["seq_des", "scn_pack"]
+        self.use_scn_diffusion_loss = self.task in ["scn_pack"]
 
         # Parse loss_weights
         self.loss_weights = {}
@@ -32,6 +34,8 @@ class SDLoss(nn.Module):
         # Define losses based on task
         if self.task == "seq_des":
             self.loss_keys = {"seq_loss", "potts_composite_loss"}
+        elif self.task == "scn_pack":
+            self.loss_keys = {"scn_mse_loss", "seq_loss"}
         else:
             raise ValueError(f"Unrecognized task: {self.task}")
 
@@ -68,6 +72,39 @@ class SDLoss(nn.Module):
                 aux["potts_composite_loss"] = potts_composite_loss(
                     target_restype, potts_decoder_aux, self.cfg.potts.label_smoothing, self.cfg.potts.per_token_avg
                 )
+
+        if self.use_scn_diffusion_loss:
+            scn_diff_outputs = outputs["scn_diffusion_aux"]
+
+            scn_pred = scn_diff_outputs["scn_pred"]
+            scn_target = scn_diff_outputs["scn_target"]
+
+            # Handle batch multiplier dimension
+            M = scn_pred.shape[0] // batch["encoded_mask"].shape[0]
+
+            # Include ghost atoms in loss computation
+            mask = repeat(
+                batch["encoded_atom_or_ghost_mask"][..., const.AF2_SCN_IDXS],
+                "b n a -> (m b) n a",
+                m=M,
+            )
+            mask = mask[..., None].expand(-1, -1, -1, 3)
+
+            # Mask out loss wherever the backbone frame doesn't exist
+            mask = mask * scn_diff_outputs["bb_frames_exists"][..., None, None]
+
+            # Loss weight based on EDM loss
+            loss_weight_scn = scn_diff_outputs["loss_weight_t"]
+
+            # Compute sidechain MSE loss
+            aux["scn_mse_loss"] = masked_mse(
+                scn_pred,
+                scn_target,
+                mask=mask,
+                per_token_avg=self.cfg.scn_mse_loss.per_token_avg,
+            )
+            aux_monitor["scn_mse_loss_unweighted"] = aux["scn_mse_loss"].mean().detach().clone()
+            aux["scn_mse_loss"] = aux["scn_mse_loss"] * loss_weight_scn
 
         # Aggregate losses
         total_loss = 0
@@ -183,4 +220,28 @@ def potts_composite_loss(
         N = mask.shape[1]
         loss = -(logp_i * mask).sum(dim=-1) / N
 
+    return loss
+
+
+def masked_mse(
+    pred: TensorType["b ...", float],
+    target: TensorType["b ...", float],
+    mask: TensorType["b ...", float],
+    per_token_avg: bool,
+) -> TensorType["b", float]:
+    """Compute MSE loss with masking. Reduces all dims except batch."""
+    mse = (pred - target) ** 2
+    mse = mse * mask
+    # Sum over all non-batch dims
+    for _ in range(mse.dim() - 1):
+        mse = mse.sum(dim=-1)
+    if per_token_avg:
+        for _ in range(mask.dim() - 1):
+            mask = mask.sum(dim=-1)
+        loss = mse / mask.clamp(min=1e-8)
+    else:
+        n_elements = 1
+        for s in pred.shape[1:]:
+            n_elements *= s
+        loss = mse / n_elements
     return loss

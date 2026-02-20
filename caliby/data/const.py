@@ -20,6 +20,7 @@ from atomworks.constants import (
     UNKNOWN_RNA,
 )
 from atomworks.io.utils import sequence as aw_sequence
+from atomworks.ml.encoding_definitions import AF2_ATOM14_ENCODING, AF2_ATOM37_ENCODING
 
 """Sequence tokens in AF3"""
 
@@ -135,3 +136,69 @@ PROT_TOKEN_TO_LETTER: Final[dict[str, str]] = {v: k for k, v in PROT_LETTER_TO_T
 
 # When generating partial diffusion ensembles, other resnames get ignored by Protpardelle-1c.
 PROTPARDELLE_SUPPORTED_RESNAMES: Final[list[str]] = [*STANDARD_AA, UNKNOWN_AA, "MSE"]
+
+# AF2 encoding constants
+AF2_BB_ATOMS: Final[list[str]] = ["N", "CA", "C", "O"]
+AF2_BB_ATOM_ORDER: Final[dict[str, int]] = {atom: i for i, atom in enumerate(AF2_BB_ATOMS)}
+AF2_BB_IDXS: Final[list[int]] = [0, 1, 2, 4]
+AF2_SCN_IDXS: Final[list[int]] = [i for i in range(37) if i not in AF2_BB_IDXS]
+AF2_STANDARD_ATOM_MASK_WITH_X: np.ndarray[bool] = AF2_ATOM37_ENCODING.idx_to_atom != ""
+AF2_STANDARD_ATOM_MASK_WITH_X[:, -1] = False  # remove OXT atoms
+AF2_STANDARD_ATOM_MASK_WITH_X[AF2_ATOM37_ENCODING.token_to_idx["UNK"]][AF2_BB_IDXS] = (
+    True  # keep backbone atoms for unknown amino acids
+)
+
+
+def _make_restype_atom14_to_atom37() -> np.ndarray:
+    """
+    Map from atom14 to atom37 per residue type.
+    For UNK tokens, we include backbone atoms.
+    """
+    restype_atom14_to_atom37 = []  # mapping (restype, atom14) --> atom37
+    atom37_tokens = AF2_ATOM37_ENCODING.tokens
+    atom14_tokens = AF2_ATOM14_ENCODING.tokens
+    atom37_atoms = AF2_ATOM37_ENCODING.idx_to_atom  # [n_tokens, 37]
+    atom14_atoms = AF2_ATOM14_ENCODING.idx_to_atom  # [n_tokens, 14]
+
+    # Ensure tokens are in the same order.
+    assert np.array_equal(atom37_tokens, atom14_tokens), "Token orders must match between encodings"
+
+    # Create mapping from atom name to index for atom37.
+    atom37_token_to_atom_to_idx = {}
+    for token_idx, token in enumerate(atom37_tokens):
+        atom_name_to_idx = {}
+        for atom_idx, atom_name in enumerate(atom37_atoms[token_idx]):
+            atom_name_stripped = atom_name.strip()
+            if atom_name_stripped and atom_name_stripped not in atom_name_to_idx:
+                atom_name_to_idx[atom_name_stripped] = atom_idx
+        atom37_token_to_atom_to_idx[token] = atom_name_to_idx
+
+    # Build mapping.
+    for token_idx, token in enumerate(atom14_tokens):
+        atom14_mapping = []
+        atom14_atom_names = atom14_atoms[token_idx]
+        atom37_atom_name_to_idx = atom37_token_to_atom_to_idx.get(token, {})
+
+        for atom14_idx, atom14_atom_name in enumerate(atom14_atom_names):
+            atom14_atom_name_stripped = atom14_atom_name.strip()
+            if atom14_atom_name_stripped and atom14_atom_name_stripped in atom37_atom_name_to_idx:
+                atom37_idx = atom37_atom_name_to_idx[atom14_atom_name_stripped]
+            else:
+                atom37_idx = 0
+            atom14_mapping.append(atom37_idx)
+
+        restype_atom14_to_atom37.append(atom14_mapping)
+
+    restype_atom14_to_atom37 = np.array(restype_atom14_to_atom37, dtype=np.int32)
+
+    # Add backbone atoms for UNK tokens.
+    unk_token_idx = AF2_ATOM37_ENCODING.token_to_idx["UNK"]
+    gly_token_idx = AF2_ATOM37_ENCODING.token_to_idx["GLY"]
+    restype_atom14_to_atom37[unk_token_idx, :] = restype_atom14_to_atom37[gly_token_idx, :]
+
+    return restype_atom14_to_atom37
+
+
+AF2_RESTYPE_ATOM14_TO_ATOM37: Final[np.ndarray] = _make_restype_atom14_to_atom37()
+AF2_RESTYPE_ATOM14_MASK_WITH_X: np.ndarray = AF2_ATOM14_ENCODING.idx_to_atom != ""
+AF2_RESTYPE_ATOM14_MASK_WITH_X[AF2_ATOM14_ENCODING.token_to_idx["UNK"]][[0, 1, 2, 3]] = True  # keep bb atoms for UNK

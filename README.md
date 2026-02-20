@@ -69,9 +69,22 @@ apptainer exec --nv \
 ## Download model weights
 To download the model weights, run `./download_model_params.sh`, which will download the model weights from [Zenodo](https://zenodo.org/records/17263678) and extract them into the `model_params/` directory. These weights include both the Caliby model and the Protpardelle-1c model.
 
-We offer two model checkpoints for Caliby:
-- `caliby.ckpt`: the default Caliby model trained on all chains in the PDB with 0.3Å Gaussian noise.
-- `soluble_caliby.ckpt`: SolubleCaliby, an analog to SolubleMPNN ([Goverde et al., 2024](https://www.nature.com/articles/s41586-024-07601-y)) trained by excluding all annotated transmembrane proteins.
+We offer the following model checkpoints:
+
+**Sequence design:**
+
+| Model | Weights | Description |
+|-------|---------|-------------|
+| Caliby | `caliby.ckpt` | Default model trained on all chains in the PDB with 0.3Å Gaussian noise |
+| SolubleCaliby | `soluble_caliby.ckpt` | Analog to SolubleMPNN ([Goverde et al., 2024](https://www.nature.com/articles/s41586-024-07601-y)) trained by excluding all annotated transmembrane proteins |
+
+**Sidechain packing:**
+
+| Model | Weights | Description |
+|-------|---------|-------------|
+| Packer (0.0Å) | `caliby_packer_000.ckpt` | Packer trained with 0.0Å noise (no noise augmentation) |
+| Packer (0.1Å) | `caliby_packer_010.ckpt` | Packer trained with 0.1Å noise (recommended) |
+| Packer (0.3Å) | `caliby_packer_030.ckpt` | Packer trained with 0.3Å noise |
 
 # Usage
 
@@ -136,7 +149,9 @@ Caliby supports specifying symmetry positions for tying sampling across residue 
 For example usage in sequence design and ensemble generation, see the scripts under the `examples/scripts/homooligomers` directory. We also provide a script to quickly generate a symmetry_pos entry for a homooligomer at `examples/scripts/homooligomers/make_homooligomer_symmetry_pos.sh`, which can be used to print out a symmetry_pos entry by specifying chain IDs and residue ranges.
 
 ## Sidechain packing
-We plan to add sidechain packing support natively within Caliby in the future. For now, we recommend using Full-Atom MPNN (FAMPNN) for sidechain packing. Please see more details at the official repository for FAMPNN: https://github.com/richardshuai/fampnn.
+Caliby supports sidechain packing via a diffusion-based sidechain packing module. Given a backbone structure and sequence, the packer predicts sidechain coordinates by denoising in a local backbone frame.
+
+To run sidechain packing, see `examples/scripts/sidechain_pack.sh`. This script takes in a `input_cfg.pdb_dir` and will pack sidechains for all PDBs in the directory, saving the packed structures as CIF files. You can configure the number of diffusion steps and step scale via `sampling_cfg_overrides`.
 
 # FAQs
 

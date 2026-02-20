@@ -296,6 +296,64 @@ def run_seq_des_ensemble(
     return outputs
 
 
+def run_sidechain_packing(
+    *,
+    model: SeqDenoiser,
+    data_cfg: DictConfig,
+    sampling_cfg: DictConfig,
+    pdb_paths: list[str],
+    device: str,
+    out_dir: str,
+) -> dict[str, Any]:
+    """
+    Given a list of PDBs, run sidechain packing on them.
+    """
+    # Set up outputs.
+    outputs = defaultdict(list)
+    sample_out_dir = f"{out_dir}/packed_samples"  # directory for output PDBs
+    Path(sample_out_dir).mkdir(parents=True, exist_ok=True)
+
+    # Load PDBs with prefetching.
+    loader = InferenceDataLoader(
+        pdb_paths,
+        data_cfg=data_cfg,
+        device=device,
+        batch_size=sampling_cfg.batch_size,
+        num_workers=sampling_cfg.num_workers,
+    )
+
+    # Begin sampling.
+    sampling_inputs = OmegaConf.to_container(sampling_cfg, resolve=True)
+    pbar = tqdm(
+        total=len(pdb_paths),
+        desc=f"Packing sidechains for {len(pdb_paths)} PDBs...",
+    )
+    for batch in loader:
+        B = len(batch["example_id"])
+
+        # Initialize seq_cond and atom_cond masks.
+        batch = initialize_sampling_masks(batch)
+
+        # For sidechain packing, we default seq_cond_mask to be the full sequence.
+        batch["seq_cond_mask"] = batch["token_resolved_mask"].clone()
+
+        # Run sampling.
+        atom_arrays = model.sidechain_pack(batch, sampling_inputs=sampling_inputs)
+
+        # Save outputs.
+        for example_id, atom_array in zip(batch["example_id"], atom_arrays):
+            out_file = f"{sample_out_dir}/packed_{example_id}.cif"
+            with open(out_file, "w") as f:
+                f.write(to_cif_string(atom_array, include_nan_coords=False))
+            outputs["example_id"].append(example_id)
+            outputs["out_pdb"].append(out_file)
+
+        pbar.update(B)
+    pbar.close()
+
+    return outputs
+
+
 def score_samples(
     *,
     model: SeqDenoiser,

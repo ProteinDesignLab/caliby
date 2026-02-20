@@ -1,10 +1,13 @@
 name: atom_mpnn
+model_version: 0
 
 defaults:
   - _self_
   - interpolant: edm_interpolant
+  - scn_diffusion_module: scn_diffusion_module
 
 task: ${model.task}
+ca_only: false
 
 # Backbone noise options
 augment_eps: 0.0

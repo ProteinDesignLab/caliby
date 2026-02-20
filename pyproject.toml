@@ -28,7 +28,8 @@ dependencies = [
     "tqdm==4.66.5",
     "wandb==0.22.3",
     "protpardelle @ git+https://github.com/ProteinDesignLab/protpardelle-1c.git@7962da091a335251fa8e5ddef5d2c937fbd9d9ae",
-    "python-dotenv==1.2.1"
+    "python-dotenv==1.2.1",
+    "scipy>=1.11.0"
 ]
 
 [tool.uv]

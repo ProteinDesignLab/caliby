@@ -1,10 +1,10 @@
 from typing import Any, override
 
-import atomworks.enums as aw_enums
 import atomworks.constants as aw_const
+import atomworks.enums as aw_enums
 import numpy as np
 import torch
-from atomworks.constants import AF3_EXCLUDED_LIGANDS, STANDARD_AA, STANDARD_DNA, STANDARD_RNA
+from atomworks.ml.encoding_definitions import AF2_ATOM37_ENCODING
 from atomworks.ml.transforms.atom_array import (
     AddGlobalTokenIdAnnotation,
     AddWithinChainInstanceResIdx,
@@ -12,9 +12,7 @@ from atomworks.ml.transforms.atom_array import (
     ComputeAtomToTokenMap,
 )
 from atomworks.ml.transforms.base import (
-    AddData,
     Compose,
-    ConditionalRoute,
     ConvertToTorch,
     Identity,
     RandomRoute,
@@ -24,7 +22,7 @@ from atomworks.ml.transforms.base import (
 )
 from atomworks.ml.transforms.bonds import AddAF3TokenBondFeatures
 from atomworks.ml.transforms.crop import CropContiguousLikeAF3, CropSpatialLikeAF3
-from atomworks.ml.transforms.encoding import EncodeAF3TokenLevelFeatures, EncodeAtomArray
+from atomworks.ml.transforms.encoding import EncodeAF3TokenLevelFeatures
 from atomworks.ml.transforms.featurize_unresolved_residues import (
     MaskResiduesWithSpecificUnresolvedAtoms,
     PlaceUnresolvedTokenAtomsOnRepresentativeAtom,
@@ -40,12 +38,10 @@ from atomworks.ml.utils.geometry import masked_center, random_rigid_augmentation
 from atomworks.ml.utils.token import (
     apply_token_wise,
     get_af3_token_center_idxs,
-    get_af3_token_center_masks,
-    get_af3_token_representative_masks,
-    spread_token_wise,
 )
 
 import caliby.data.const as const
+import caliby.data.transform.encoding as encoding
 from caliby.data.transform.pad import pad_dim
 
 # Keep track of the token/atom dimensions of the features for padding & cropping
@@ -70,6 +66,13 @@ FEAT_TO_TOKEN_DIM = {
     # optional features that might not be present
     "seq_cond_mask": [0],
     "token_exists_mask": [0],
+    # AF2-encoded features
+    "encoded_seq": [0],
+    "encoded_xyz": [0],
+    "encoded_mask": [0],
+    "encoded_standard_atom_mask": [0],
+    "encoded_atom_or_ghost_mask": [0],
+    "encoded_token_is_atom": [0],
 }
 
 FEAT_TO_ATOM_DIM = {
@@ -81,6 +84,7 @@ FEAT_TO_ATOM_DIM = {
     "atom_to_token_map": [0],
     "prot_bb_atom_mask": [0],
     "prot_scn_atom_mask": [0],
+    "encoded_atom_to_within_token_map": [0],
     # optional features that might not be present
     "atom_cond_mask": [0],
 }
@@ -158,8 +162,14 @@ def sd_featurizer(
         # Add features from the atom_array
         FeaturizeCoordsAndMasks(),
         CenterRandomAugmentation(
-            apply_random_augmentation=apply_random_augmentation, translation_scale=translation_scale
+            apply_random_augmentation=apply_random_augmentation,
+            translation_scale=translation_scale,
+            update_atom_array=True,
         ),
+        # Featurize atom37 coordinates.
+        encoding.EncodeAtomArrayWithMapping(encoding=AF2_ATOM37_ENCODING, default_coord=0.0, extra_annotations=[]),
+        FeaturizeEncodedMasks(),
+        ConvertToTorch(keys=["encoded"]),
     ]
 
     transforms = [
@@ -167,8 +177,8 @@ def sd_featurizer(
         cropping_transform,
         *featurization_transforms_post_crop,
         PadSDFeats(max_tokens=max_tokens, max_atoms=max_atoms),
-        SubsetToKeys(keys=["example_id", "feats", *INFERENCE_ONLY_KEYS]),
-        FlattenFeatsDict(),
+        SubsetToKeys(keys=["example_id", "feats", "encoded", *INFERENCE_ONLY_KEYS]),
+        FlattenSDFeats(),
         RemoveKeys(keys=remove_keys),
     ]
 
@@ -247,23 +257,55 @@ class PadSDFeats(Transform):
         return data
 
 
-class FlattenFeatsDict(Transform):
-    """Flatten features into the data dict."""
+class FlattenSDFeats(Transform):
+    """Flatten features into the data dict.
+
+    Flattens "feats" key into the data dict.
+    If "encoded" is in the data dict, flatten it into the data dict with prefix 'encoded_'.
+    """
 
     @override
     def forward(self, data: dict[str, Any]) -> dict[str, Any]:
         feats = data.pop("feats")
         for k, v in feats.items():
             data[k] = v
+
+        if "encoded" in data:
+            encoded = data.pop("encoded")
+            for k, v in encoded.items():
+                data[f"encoded_{k}"] = v
+        return data
+
+
+class FeaturizeEncodedMasks(Transform):
+    """Featurize encoded masks:
+    - standard_atom_mask: 1 for atoms that are in the residue type; not ghost atoms
+    - atom_or_ghost_mask: 1 for atoms that are present in the PDB file or are ghost atoms
+    """
+
+    @override
+    def forward(self, data: dict[str, Any]) -> dict[str, Any]:
+        encoded = data["encoded"]
+        # standard_atom_mask: 1 for atoms that are in the residue type; standard atoms.
+        standard_atom_mask = const.AF2_STANDARD_ATOM_MASK_WITH_X[encoded["seq"]]
+
+        # atom_or_ghost_mask: 1 for atoms that are present in the PDB file or are ghost atoms.
+        atom_or_ghost_mask = encoded["mask"] | (1 - standard_atom_mask)
+
+        data["encoded"]["standard_atom_mask"] = standard_atom_mask.astype(float)
+        data["encoded"]["atom_or_ghost_mask"] = atom_or_ghost_mask.astype(float)
         return data
 
 
 class CenterRandomAugmentation(Transform):
-    """Center the atom array. If apply_random_augmentation is True, also randomly rotate and translate."""
+    """Center the atom array. If apply_random_augmentation is True, also randomly rotate and translate.
+    If update_atom_array is True, update the atom array in the data dict.
+    """
 
-    def __init__(self, apply_random_augmentation: bool, translation_scale: float):
+    def __init__(self, apply_random_augmentation: bool, translation_scale: float, update_atom_array: bool = False):
         self.apply_random_augmentation = apply_random_augmentation
         self.translation_scale = translation_scale
+        self.update_atom_array = update_atom_array
 
     @override
     def forward(self, data: dict[str, Any]) -> dict[str, Any]:
@@ -274,8 +316,11 @@ class CenterRandomAugmentation(Transform):
         if self.apply_random_augmentation:
             centered_coords = random_rigid_augmentation(
                 centered_coords[None], batch_size=1, s=self.translation_scale
-            ).squeeze(0)  #! dummy atom coords masked later?
+            ).squeeze(0)
         data["feats"]["coords"] = centered_coords
+
+        if self.update_atom_array:
+            data["atom_array"].coord = centered_coords.numpy()
 
         return data
 
