@@ -3,11 +3,11 @@ out_dir: /media/scratch/datasets/atomworks_debug
 num_workers: 8
 
 dataset:
-  _target_: atomworks.ml.datasets.datasets.StructuralDatasetWrapper
+  _target_: atomworks.ml.datasets.StructuralDatasetWrapper
   dataset_parser:
       _target_: atomworks.ml.datasets.parsers.GenericDFParser
   dataset:
-      _target_: atomworks.ml.datasets.datasets.PandasDataset
+      _target_: atomworks.ml.datasets.PandasDataset
       name: null
       id_column: example_id
       data: ${out_dir}/metadata_for_caching.parquet

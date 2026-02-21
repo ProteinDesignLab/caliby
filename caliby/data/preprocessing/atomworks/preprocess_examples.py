@@ -8,7 +8,7 @@ from pathlib import Path
 import hydra
 import torch
 import yaml
-from atomworks.ml.datasets.datasets import StructuralDatasetWrapper
+from atomworks.ml.datasets import PandasDataset
 from omegaconf import DictConfig, OmegaConf, open_dict
 from tqdm import tqdm
 
@@ -72,7 +72,7 @@ def main(cfg: DictConfig):
             cache_fn(idx, dataset=struct_dataset)
 
 
-def _cache_examples(idx: int, cached_example_dir: str, *, dataset: StructuralDatasetWrapper | None = None) -> str:
+def _cache_examples(idx: int, cached_example_dir: str, *, dataset: PandasDataset | None = None) -> str:
     try:
         feats = (
             dataset[idx] if dataset is not None else _DATASET[idx]
@@ -88,7 +88,7 @@ def _cache_examples(idx: int, cached_example_dir: str, *, dataset: StructuralDat
 
 
 # Initialize the dataset in each worker so that the dataset is not pickled
-_DATASET: StructuralDatasetWrapper | None = None
+_DATASET: PandasDataset | None = None
 
 
 def _init_dataset(dataset_cfg: DictConfig):

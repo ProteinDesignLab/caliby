@@ -10,7 +10,7 @@ import lightning as L
 import numpy as np
 import pandas as pd
 import torch
-from atomworks.ml.datasets.datasets import FileDataset
+from atomworks.ml.datasets import MolecularDataset
 from atomworks.ml.datasets.parsers import GenericDFParser
 from atomworks.ml.example_id import generate_example_id
 from atomworks.ml.utils.io import read_parquet_with_metadata
@@ -69,9 +69,9 @@ def worker_init_fn(_):
     random.seed(worker_seed)
 
 
-class SDDataset(FileDataset):
+class SDDataset(MolecularDataset):
     def __init__(self, cfg: DictConfig, phase: Literal["train", "val"]):
-        super().__init__()
+        super().__init__(name="sd_dataset")
 
         self.cfg = cfg
         self.phase = phase
