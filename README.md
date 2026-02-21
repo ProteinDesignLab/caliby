@@ -67,24 +67,30 @@ apptainer exec --nv \
 ```
 
 ## Download model weights
-To download the model weights, run `./download_model_params.sh`, which will download the model weights from [Zenodo](https://zenodo.org/records/17263678) and extract them into the `model_params/` directory. These weights include both the Caliby model and the Protpardelle-1c model.
+Model weights are hosted on [HuggingFace](https://huggingface.co/ProteinDesignLab/caliby-weights). Weights are **automatically downloaded** on first run, so you can skip this step if you prefer. To pre-download all weights at once, run:
+```
+./download_model_params.sh
+```
+This will download the weights into the `model_params/` directory (configurable via `MODEL_PARAMS_DIR` in `env_setup.sh`). These weights include the Caliby models, ProteinMPNN, and the Protpardelle-1c model.
 
-We offer the following model checkpoints:
+We offer the following model checkpoints, specified via the `ckpt_name_or_path` argument:
 
 **Sequence design:**
 
-| Model | Weights | Description |
+| Model | `ckpt_name_or_path` | Description |
 |-------|---------|-------------|
-| Caliby | `caliby.ckpt` | Default model trained on all chains in the PDB with 0.3Å Gaussian noise |
-| SolubleCaliby | `soluble_caliby.ckpt` | Analog to SolubleMPNN ([Goverde et al., 2024](https://www.nature.com/articles/s41586-024-07601-y)) trained by excluding all annotated transmembrane proteins |
+| Caliby | `caliby` (default) | Default model trained on all chains in the PDB with 0.3Å Gaussian noise |
+| SolubleCaliby | `soluble_caliby` | Analog to SolubleMPNN ([Goverde et al., 2024](https://www.nature.com/articles/s41586-024-07601-y)) trained by excluding all annotated transmembrane proteins |
 
 **Sidechain packing:**
 
-| Model | Weights | Description |
+| Model | `ckpt_name_or_path` | Description |
 |-------|---------|-------------|
-| Packer (0.0Å) | `caliby_packer_000.ckpt` | Packer trained with 0.0Å noise (no noise augmentation) |
-| Packer (0.1Å) | `caliby_packer_010.ckpt` | Packer trained with 0.1Å noise (recommended) |
-| Packer (0.3Å) | `caliby_packer_030.ckpt` | Packer trained with 0.3Å noise |
+| Caliby packer (0.0Å) | `caliby_packer_000` | Sidechain packer trained with 0.0Å noise |
+| Caliby packer (0.1Å) | `caliby_packer_010` | Sidechain packer trained with 0.1Å noise (recommended for most cases)|
+| Caliby packer (0.3Å) | `caliby_packer_030` | Sidechain packer trained with 0.3Å noise |
+
+If `ckpt_name_or_path` does not end with `.ckpt`, it is treated as a model name and automatically resolved and downloaded. If it ends with `.ckpt`, it is treated as a file path (e.g., `ckpt_name_or_path=/path/to/custom_model.ckpt`).
 
 # Usage
 

@@ -30,6 +30,7 @@ from caliby.data.transform.sd_featurizer import sd_featurizer
 from caliby.eval.eval_utils.inference_dataloader import InferenceDataLoader
 from caliby.model.seq_denoiser.lit_sd_model import LitSeqDenoiser
 from caliby.model.seq_denoiser.sd_model import SeqDenoiser
+from caliby.weights import resolve_ckpt_path
 
 _VALID_POS_CONSTRAINT_COLUMNS = [
     "pdb_key",
@@ -77,8 +78,9 @@ def get_seq_des_model(cfg: DictConfig, device: str) -> dict[str, Any]:
     model_name = cfg.model_name
     seq_des_model = {"model_name": model_name, "cfg": cfg, "device": device}
 
-    lit_sd_model = LitSeqDenoiser.load_from_checkpoint(cfg.atom_mpnn.ckpt_path).eval()
-    model_cfg, _ = get_cfg_from_ckpt(cfg.atom_mpnn.ckpt_path)
+    ckpt_path = resolve_ckpt_path(cfg.atom_mpnn.ckpt_name_or_path)
+    lit_sd_model = LitSeqDenoiser.load_from_checkpoint(ckpt_path).eval()
+    model_cfg, _ = get_cfg_from_ckpt(ckpt_path)
     data_cfg = hydra.utils.instantiate(model_cfg.data)
     sampling_cfg = OmegaConf.load(cfg.atom_mpnn.sampling_cfg)
     sampling_cfg = OmegaConf.merge(sampling_cfg, OmegaConf.to_container(cfg.atom_mpnn.overrides, resolve=True))

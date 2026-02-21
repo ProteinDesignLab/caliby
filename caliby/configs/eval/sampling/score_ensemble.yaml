@@ -3,7 +3,7 @@ seed: 0
 num_workers: 8  # for dataloading
 
 # Inputs
-ckpt_path: null
+ckpt_name_or_path: caliby
 out_dir: null
 save_local_conditionals: false
 
@@ -26,7 +26,7 @@ sampling_cfg_overrides:
 seq_des_cfg:
   model_name: "atom_mpnn"
   atom_mpnn:
-    ckpt_path: ${ckpt_path}
+    ckpt_name_or_path: ${ckpt_name_or_path}
     sampling_cfg: caliby/configs/seq_des/atom_mpnn_inference.yaml
     overrides: ${sampling_cfg_overrides}
 

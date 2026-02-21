@@ -3,7 +3,7 @@ seed: 0
 num_workers: 8  # for dataloading
 
 # Inputs
-model_params_path: null
+model_params_path: model_params
 sampling_yaml_path: caliby/configs/protpardelle-1c/multichain_backbone_partial_diffusion.yaml
 out_dir: null
 num_samples_per_pdb: 32

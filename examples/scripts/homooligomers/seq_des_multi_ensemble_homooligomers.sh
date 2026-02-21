@@ -6,7 +6,7 @@ CONFORMER_DIR=examples/outputs/homooligomers/generate_ensembles/cc95-epoch3490-s
 
 source env_setup.sh
 python3 caliby/eval/sampling/seq_des_multi_ensemble.py \
-    ckpt_path=model_params/caliby/caliby.ckpt \
+    ckpt_name_or_path=caliby \
     input_cfg.conformer_dir=${CONFORMER_DIR} \
     pos_constraint_csv=examples/example_data/pos_constraint_csvs/homooligomer_constraints.csv \
     sampling_cfg_overrides.num_seqs_per_pdb=4 \
