@@ -26,6 +26,7 @@ Both this repository and Caliby are still under active development, so please re
     - [Position-wise constraints](#position-wise-constraints)
     - [Specifying symmetry positions](#specifying-symmetry-positions)
   - [Sidechain packing](#sidechain-packing)
+- [Testing](#testing)
 - [FAQs](#faqs)
 - [License](#license)
 - [Citation](#citation)
@@ -79,8 +80,9 @@ We offer the following model checkpoints, specified via the `ckpt_name_or_path` 
 
 | Model | `ckpt_name_or_path` | Description |
 |-------|---------|-------------|
-| Caliby | `caliby` (default) | Default model trained on all chains in the PDB with 0.3Å Gaussian noise |
-| SolubleCaliby | `soluble_caliby` | Analog to SolubleMPNN ([Goverde et al., 2024](https://www.nature.com/articles/s41586-024-07601-y)) trained by excluding all annotated transmembrane proteins |
+| Caliby | `caliby` (default) | Default model trained on all chains in the PDB with 0.3Å Gaussian noise. Trained on monomers only. |
+| SolubleCaliby | `soluble_caliby` | Analog to SolubleMPNN ([Goverde et al., 2024](https://www.nature.com/articles/s41586-024-07601-y)) trained by excluding all annotated transmembrane proteins. Trained on monomers only. |
+| SolubleCaliby v1 | `solublecaliby_v1` | SolubleCaliby trained on both monomers and interfaces |
 
 **Sidechain packing:**
 
@@ -158,6 +160,14 @@ For example usage in sequence design and ensemble generation, see the scripts un
 Caliby supports sidechain packing via a diffusion-based sidechain packing module. Given a backbone structure and sequence, the packer predicts sidechain coordinates by denoising in a local backbone frame.
 
 To run sidechain packing, see `examples/scripts/sidechain_pack.sh`. This script takes in a `input_cfg.pdb_dir` and will pack sidechains for all PDBs in the directory, saving the packed structures as CIF files. You can configure the number of diffusion steps and step scale via `sampling_cfg_overrides`.
+
+# Testing
+To run the regression tests against saved reference outputs:
+```
+source env_setup.sh
+python -m pytest tests/test_scripts.py -v
+```
+Tests take ~15-20 minutes (GPU required).
 
 # FAQs
 
