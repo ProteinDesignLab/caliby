@@ -17,8 +17,8 @@ from caliby.model.seq_denoiser.denoisers.seq_design.mpnn_utils import (
 )
 
 
-class AtomMPNN(nn.Module):
-    """Modified ProteinMPNN network to predict sequence from full atom structure."""
+class CalibyMPNN(nn.Module):
+    """MPNN model for Caliby sequence design."""
 
     def __init__(self, cfg: DictConfig, model_version: int = 0):
         super().__init__()

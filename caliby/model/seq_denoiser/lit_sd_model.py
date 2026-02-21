@@ -8,6 +8,7 @@ from torch.optim import Adam, AdamW
 from torch.optim.lr_scheduler import LinearLR
 from torchtyping import TensorType
 
+from caliby.checkpoint_utils import migrate_legacy_cfg, migrate_legacy_state_dict
 from caliby.model.lr_schedule import InverseSqrtLR, NoamLR
 from caliby.model.seq_denoiser.sd_loss import SDLoss
 from caliby.model.seq_denoiser.sd_model import SeqDenoiser
@@ -16,7 +17,7 @@ from caliby.model.seq_denoiser.sd_model import SeqDenoiser
 class LitSeqDenoiser(L.LightningModule):
     def __init__(self, cfg: DictConfig):
         super().__init__()
-        self.cfg = cfg
+        self.cfg = migrate_legacy_cfg(cfg)
         self.model = SeqDenoiser(cfg.model)
 
         if cfg.train.compile_model:
@@ -26,6 +27,10 @@ class LitSeqDenoiser(L.LightningModule):
         # Set up loss
         self.loss = SDLoss(cfg.loss)
         self.save_hyperparameters()
+
+    def load_state_dict(self, state_dict, *args, **kwargs):
+        state_dict = migrate_legacy_state_dict(state_dict, self.cfg)
+        return super().load_state_dict(state_dict, *args, **kwargs)
 
     def setup(self, stage: str):
         if stage == "fit":

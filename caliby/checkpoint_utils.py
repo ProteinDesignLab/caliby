@@ -6,6 +6,68 @@ import torch
 from omegaconf import DictConfig, OmegaConf, open_dict
 
 
+def migrate_legacy_state_dict(state_dict: dict[str, Any], cfg: DictConfig) -> dict[str, Any]:
+    """Remap legacy checkpoint keys to their current names."""
+    state_dict_migrations: dict[str, str] = {}  # old_prefix -> new_prefix
+
+    # Legacy config settings.
+    if cfg.model.denoiser.get("model_version", 0) in [0, 1]:
+        state_dict_migrations = {
+            "denoiser.atom_mpnn.": "denoiser.mpnn.",
+        }
+
+    # Migrate state dict keys.
+    out = {}
+    for key, value in state_dict.items():
+        new_key = key
+        for old_prefix, new_prefix in state_dict_migrations.items():
+            if old_prefix in key:
+                new_key = key.replace(old_prefix, new_prefix, 1)
+                break
+        out[new_key] = value
+    return out
+
+
+def migrate_legacy_cfg(cfg: DictConfig) -> DictConfig:
+    """Backfill missing keys and apply renames to legacy configs."""
+
+    # Config key renames: (old_dotpath, new_dotpath).
+    cfg_key_renames: list[tuple[str, str]] = []
+
+    # Set configs if keys didn't exist in old configs: dotpath -> default_value.
+    cfg_defaults: dict[str, Any] = {}
+
+    # Legacy config settings.
+    if cfg.model.denoiser.get("model_version", 0) == 0:
+        cfg_defaults = {
+            "model.denoiser.model_version": 0,
+            "model.denoiser.mpnn.name": "caliby_mpnn",
+        }
+    elif cfg.model.denoiser.model_version == 1:
+        cfg_defaults = {
+            "model.denoiser.mpnn.name": "caliby_mpnn",
+        }
+
+    # Migrate config.
+    _SENTINEL = object()
+    with open_dict(cfg):
+        # Rename keys.
+        for old_path, new_path in cfg_key_renames:
+            val = OmegaConf.select(cfg, old_path, default=_SENTINEL)
+            if val is not _SENTINEL:
+                OmegaConf.update(cfg, new_path, val)
+
+        # Set default values.
+        for dotpath, default in cfg_defaults.items():
+            if OmegaConf.select(cfg, dotpath, default=_SENTINEL) is _SENTINEL:
+                parts = dotpath.rsplit(".", 1)
+                parent_path, key = parts[0], parts[1]
+                parent = OmegaConf.select(cfg, parent_path, default=_SENTINEL)
+                if parent is not _SENTINEL:
+                    OmegaConf.update(parent, key, default)
+    return cfg
+
+
 def get_cfg_from_ckpt(
     ckpt_path: str, return_as_dict: bool = False
 ) -> tuple[Union[DictConfig, dict[str, Any]], dict[str, Any]]:

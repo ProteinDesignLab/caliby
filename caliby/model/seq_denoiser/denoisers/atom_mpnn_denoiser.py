@@ -13,12 +13,15 @@ from omegaconf import DictConfig
 from torchtyping import TensorType
 from tqdm import tqdm
 
+import torch.nn as nn
+from omegaconf import DictConfig as _DictConfig
+
 import caliby.data.const as const
 import caliby.model.seq_denoiser.denoisers.seq_design.potts as potts
 from caliby.data.data import to
 from caliby.data.feature.feature_utils import slice_feats
 from caliby.model.seq_denoiser.denoisers.denoiser import BaseSeqDenoiser
-from caliby.model.seq_denoiser.denoisers.seq_design.atom_mpnn import AtomMPNN, add_atom14_feats
+from caliby.model.seq_denoiser.denoisers.seq_design.atom_mpnn import add_atom14_feats
 from chroma.layers import complexity
 
 
@@ -33,9 +36,9 @@ class AtomMPNNDenoiser(BaseSeqDenoiser):
         # Random Gaussian noise.
         self.augment_eps = cfg.augment_eps
 
-        # Sequence design model: AtomMPNN
+        # Sequence design model.
         model_version = cfg.get("model_version", 0)
-        self.atom_mpnn = AtomMPNN(cfg.mpnn, model_version=model_version)
+        self.mpnn = _get_mpnn_model(cfg.mpnn, model_version)
 
         # Sidechain diffusion head
         if self.task == "scn_pack":
@@ -62,7 +65,7 @@ class AtomMPNNDenoiser(BaseSeqDenoiser):
         batch = self.get_training_random_noise(batch)
 
         # Run model.
-        seq_logits, mpnn_feats = self.atom_mpnn(batch)
+        seq_logits, mpnn_feats = self.mpnn(batch)
 
         # Outputs.
         aux_preds = {
@@ -215,7 +218,7 @@ class AtomMPNNDenoiser(BaseSeqDenoiser):
         S = []  # keep track of sequences for each sample
         aux["U"] = []  # keep track of energies for each sample
         for _ in tqdm(range(sampling_inputs["num_seqs_per_pdb"]), desc="Sampling sequences", leave=False):
-            S_sample, U_sample = self.atom_mpnn.decoder_S_potts.sample(
+            S_sample, U_sample = self.mpnn.decoder_S_potts.sample(
                 potts_decoder_aux["h"],
                 potts_decoder_aux["J"],
                 potts_decoder_aux["edge_idx"],
@@ -619,3 +622,14 @@ def _unfold_symmetry_pos(S: TensorType["b n", int], symmetry_pos: list[list[int]
             for dst_index in dst_indices:
                 S[bi, dst_index] = S[bi, src_index]
     return S
+
+
+def _get_mpnn_model(cfg: _DictConfig, model_version: int = 0) -> nn.Module:
+    """Get the MPNN model specified in the config."""
+    name = cfg.get("name", "caliby_mpnn")
+    if name == "caliby_mpnn":
+        from caliby.model.seq_denoiser.denoisers.seq_design.atom_mpnn import CalibyMPNN
+
+        return CalibyMPNN(cfg, model_version)
+    else:
+        raise ValueError(f"Unknown MPNN model: {name}")
