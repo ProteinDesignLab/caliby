@@ -161,14 +161,6 @@ Caliby supports sidechain packing via a diffusion-based sidechain packing module
 
 To run sidechain packing, see `examples/scripts/sidechain_pack.sh`. This script takes in a `input_cfg.pdb_dir` and will pack sidechains for all PDBs in the directory, saving the packed structures as CIF files. You can configure the number of diffusion steps and step scale via `sampling_cfg_overrides`.
 
-# Testing
-To run the regression tests against saved reference outputs:
-```
-source env_setup.sh
-python -m pytest tests/test_scripts.py -v
-```
-Tests take ~15-20 minutes (GPU required).
-
 # FAQs
 
 ### I encountered a "Residue index / chain ID mismatch between decoys" error when running ensemble-conditioned sequence design. How do I fix this?
