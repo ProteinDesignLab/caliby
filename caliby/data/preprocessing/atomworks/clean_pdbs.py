@@ -2,12 +2,15 @@
 Clean PDB files for use with Protpardelle-1c ensemble generation.
 """
 
+import tempfile
 from pathlib import Path
 
 import atomworks.enums as aw_enums
 import hydra
 import numpy as np
+from atomworks.io.parser import get_structure, read_any
 from atomworks.io.utils.io_utils import to_cif_string
+from biotite.structure.io.pdb import PDBFile
 from joblib import Parallel, delayed
 from omegaconf import DictConfig
 from tqdm import tqdm
@@ -39,9 +42,30 @@ def main(cfg: DictConfig):
             _clean_pdb(pdb_path, cfg.out_dir)
 
 
+def _fix_blank_chain_ids(pdb_path: str) -> str:
+    """If a PDB has blank chain IDs, load with biotite, assign 'A', and write to a temp PDB. Returns the path to use."""
+    file_obj = read_any(pdb_path)
+    atom_array = get_structure(file_obj, model=1)
+    atom_array.chain_id[np.array([c.strip() == "" for c in atom_array.chain_id])] = "A"
+    pdb_out = PDBFile()
+    pdb_out.set_structure(atom_array)
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdb", delete=False, mode="w")
+    pdb_out.write(tmp)
+    tmp.close()
+    return tmp.name
+
+
 def _clean_pdb(pdb_path: str, out_dir: str):
-    # Preprocess the PDB file.
-    example = get_sd_example(pdb_path, data_cfg=None)
+    # Try the normal path first; if the PDB has blank chain IDs, fix and retry.
+    fixed_path = None
+    try:
+        example = get_sd_example(pdb_path, data_cfg=None)
+    except ValueError as e:
+        if "Chain identifier is empty" not in str(e):
+            raise
+        fixed_path = _fix_blank_chain_ids(pdb_path)
+        example = get_sd_example(fixed_path, data_cfg=None)
+        Path(fixed_path).unlink()
     atom_array = example["atom_array"]
 
     # Remove any unresolved atoms.
