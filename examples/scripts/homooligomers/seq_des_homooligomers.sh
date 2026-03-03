@@ -3,9 +3,9 @@
 # with symmetry position constraints specified in examples/example_data/pos_constraint_csvs/homooligomer_constraints.csv.
 
 source env_setup.sh
-python3 caliby/eval/sampling/seq_des_multi.py \
+python3 caliby/eval/sampling/seq_des.py \
     ckpt_name_or_path=caliby \
     input_cfg.pdb_dir=examples/example_data/homooligomers \
     pos_constraint_csv=examples/example_data/pos_constraint_csvs/homooligomer_constraints.csv \
     sampling_cfg_overrides.num_seqs_per_pdb=4 \
-    out_dir=examples/outputs/homooligomers/seq_des_multi
+    out_dir=examples/outputs/homooligomers/seq_des

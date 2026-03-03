@@ -1,0 +1,7 @@
+af2:
+  data_dir: null
+  num_models: 5  # the best by plddt will be saved
+  sample_models: true  # whether to randomly sample num_models out of the 5 models
+  num_recycles: 3
+  save_best: true
+  use_multimer: false

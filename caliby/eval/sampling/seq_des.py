@@ -11,7 +11,7 @@ from caliby.eval.eval_utils.eval_setup_utils import get_pdb_files
 from caliby.eval.eval_utils.seq_des_utils import get_seq_des_model, run_seq_des
 
 
-@hydra.main(config_path="../../configs/eval/sampling", config_name="seq_des_multi", version_base="1.3.2")
+@hydra.main(config_path="../../configs/eval/sampling", config_name="seq_des", version_base="1.3.2")
 def main(cfg: DictConfig):
     """
     Script for designing sequences for multiple PDBs.
@@ -62,6 +62,24 @@ def main(cfg: DictConfig):
     # Save outputs to CSV
     output_df = pd.DataFrame(outputs)
     output_df.to_csv(f"{out_dir}/seq_des_outputs.csv", index=False)
+
+    if cfg.run_self_consistency_eval:
+        from caliby.eval.eval_utils import eval_metrics
+        from caliby.eval.eval_utils.folding_utils import get_struct_pred_model
+
+        # Load structure prediction model for self-consistency evaluation.
+        pred_out_dir = f"{out_dir}/struct_preds"
+        Path(pred_out_dir).mkdir(parents=True, exist_ok=True)
+        struct_pred_model = get_struct_pred_model(cfg.struct_pred_cfg, device=device)
+
+        # Run self-consistency evaluation.
+        id_to_metrics = eval_metrics.run_self_consistency_eval(
+            outputs["out_pdb"], struct_pred_model, out_dir=pred_out_dir
+        )
+
+        # Save metrics as CSV
+        metrics_df = pd.DataFrame([{"example_id": eid, **m} for eid, m in id_to_metrics.items()])
+        metrics_df.to_csv(f"{out_dir}/self_consistency_metrics.csv", index=False)
 
 
 if __name__ == "__main__":

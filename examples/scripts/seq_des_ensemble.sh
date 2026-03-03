@@ -5,8 +5,8 @@
 CONFORMER_DIR=examples/outputs/generate_ensembles/cc95-epoch3490-sampling_partial_diffusion-ss1.0-schurn0-ccstart0.0-dx0.0-dy0.0-dz0.0-rewind150
 
 source env_setup.sh
-python3 caliby/eval/sampling/seq_des_multi_ensemble.py \
+python3 caliby/eval/sampling/seq_des_ensemble.py \
     ckpt_name_or_path=caliby \
     input_cfg.conformer_dir=${CONFORMER_DIR} \
     sampling_cfg_overrides.num_seqs_per_pdb=4 \
-    out_dir=examples/outputs/seq_des_multi_ensemble
+    out_dir=examples/outputs/seq_des_ensemble

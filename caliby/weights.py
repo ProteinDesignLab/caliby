@@ -55,3 +55,27 @@ def ensure_dir(path: str) -> str:
     print(f"Downloading {subdir}/ from HuggingFace ({HF_REPO_ID})...")
     snapshot_download(repo_id=HF_REPO_ID, local_dir=weights_dir, allow_patterns=f"{subdir}/**")
     return path
+
+
+_AF2_PARAM_FILES = [f"af2/params/params_model_{i}_ptm.npz" for i in range(1, 6)]
+
+
+def ensure_af2_params(data_dir: str | None = None) -> str:
+    """Ensure AF2 parameter files exist locally, downloading from HuggingFace if needed.
+
+    If *data_dir* is ``None`` or empty, defaults to ``$MODEL_PARAMS_DIR/af2``.
+    Returns the resolved *data_dir*.
+    """
+    if not data_dir:
+        data_dir = os.path.join(os.environ["MODEL_PARAMS_DIR"], "af2")
+
+    params_dir = os.path.join(data_dir, "params")
+    if os.path.isdir(params_dir) and any(f.endswith("_ptm.npz") for f in os.listdir(params_dir)):
+        return data_dir
+
+    weights_dir = os.environ["MODEL_PARAMS_DIR"]
+    print(f"Downloading AF2 parameters from HuggingFace ({HF_REPO_ID})...")
+    for filename in _AF2_PARAM_FILES:
+        hf_hub_download(repo_id=HF_REPO_ID, filename=filename, local_dir=weights_dir)
+
+    return data_dir
