@@ -4,6 +4,7 @@ from typing import Any
 
 import numpy as np
 import torch
+import torch.nn as nn
 from atomworks.io.utils import non_rcsb
 from atomworks.ml.encoding_definitions import AF2_ATOM37_ENCODING
 from atomworks.ml.transforms import encoding as aw_encoding
@@ -13,15 +14,15 @@ from omegaconf import DictConfig
 from torchtyping import TensorType
 from tqdm import tqdm
 
-import torch.nn as nn
-from omegaconf import DictConfig as _DictConfig
-
 import caliby.data.const as const
 import caliby.model.seq_denoiser.denoisers.seq_design.potts as potts
 from caliby.data.data import to
 from caliby.data.feature.feature_utils import slice_feats
 from caliby.model.seq_denoiser.denoisers.denoiser import BaseSeqDenoiser
 from caliby.model.seq_denoiser.denoisers.seq_design.atom_mpnn import add_atom14_feats
+from caliby.model.seq_denoiser.denoisers.seq_design.potts_state_space import (
+    slice_potts_decoder_aux,
+)
 from chroma.layers import complexity
 
 
@@ -322,7 +323,7 @@ class AtomMPNNDenoiser(BaseSeqDenoiser):
         Returns:
             potts_decoder_aux: dict[str, TensorType["b ..."]]: potts parameters
             batch: dict[str, TensorType["b ..."]]: batch with token_exists_mask added
-            sampling_inputs: dict[str, Any]: sampling inputs with pos_restrict_aatype sliced to representative elements
+            sampling_inputs: dict[str, Any]: sampling inputs sliced to representative elements where needed
         """
         # Aggregate on CPU to avoid memory usage scaling with ensemble size.
         batch_device = batch["restype"].device
@@ -338,8 +339,9 @@ class AtomMPNNDenoiser(BaseSeqDenoiser):
             subbatch = slice_feats(batch, slice(bi, bi + subbatch_size))
 
             _, aux_preds_i = self(subbatch, is_sampling=True, sampling_inputs=sampling_inputs)
+            potts_decoder_aux_i = slice_potts_decoder_aux(aux_preds_i["potts_decoder_aux"])
 
-            for k, v in aux_preds_i["potts_decoder_aux"].items():
+            for k, v in potts_decoder_aux_i.items():
                 potts_decoder_aux.setdefault(k, []).append(v.to(aggregate_device))
             token_exists_mask.append(aux_preds_i["token_exists_mask"].to(aggregate_device))
         potts_decoder_aux = {k: torch.cat(v, dim=0) for k, v in potts_decoder_aux.items()}
@@ -369,7 +371,7 @@ class AtomMPNNDenoiser(BaseSeqDenoiser):
         if sampling_inputs.get("symmetry_pos", None) is not None:
             potts_decoder_aux = _fold_symmetry_pos(potts_decoder_aux, sampling_inputs["symmetry_pos"])
 
-        # Move outputs back to batch device.
+        # Move outputs back to batch device. Potts params stay in reduced state space.
         potts_decoder_aux = to(potts_decoder_aux, batch_device)
         batch["token_exists_mask"] = to(batch["token_exists_mask"], batch_device)
 
@@ -624,7 +626,7 @@ def _unfold_symmetry_pos(S: TensorType["b n", int], symmetry_pos: list[list[int]
     return S
 
 
-def _get_mpnn_model(cfg: _DictConfig, model_version: int = 0) -> nn.Module:
+def _get_mpnn_model(cfg: DictConfig, model_version: int = 0) -> nn.Module:
     """Get the MPNN model specified in the config."""
     name = cfg.get("name", "caliby_mpnn")
     if name == "caliby_mpnn":

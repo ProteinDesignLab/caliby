@@ -134,6 +134,12 @@ PROT_LETTER_TO_TOKEN: Final[dict[str, str]] = {
 }  # include "X" for unknown amino acids
 PROT_TOKEN_TO_LETTER: Final[dict[str, str]] = {v: k for k, v in PROT_LETTER_TO_TOKEN.items()}
 
+# Reduced alphabet for Potts model.
+POTTS_TOKENS: Final[tuple[str, ...]] = (*STANDARD_AA, UNKNOWN_AA, GAP)
+POTTS_AF3_TOKEN_IDXS: Final[np.ndarray] = np.array(AF3_ENCODING.encode(POTTS_TOKENS), dtype=np.int64)
+AF3_TO_POTTS_TOKEN_IDX: Final[np.ndarray] = np.full(AF3_ENCODING.n_tokens, -1, dtype=np.int64)
+AF3_TO_POTTS_TOKEN_IDX[POTTS_AF3_TOKEN_IDXS] = np.arange(len(POTTS_TOKENS), dtype=np.int64)
+
 # When generating partial diffusion ensembles, other resnames get ignored by Protpardelle-1c.
 PROTPARDELLE_SUPPORTED_RESNAMES: Final[list[str]] = [*STANDARD_AA, UNKNOWN_AA, "MSE"]
 

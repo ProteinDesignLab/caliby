@@ -29,6 +29,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 from tqdm.auto import tqdm
 
+import caliby.data.const as const
+from caliby.model.seq_denoiser.denoisers.seq_design.potts_state_space import (
+    map_potts_indices_to_af3,
+    normalize_potts_inputs,
+)
 from chroma.layers import graph
 
 
@@ -292,7 +297,7 @@ class GraphPotts(nn.Module):
         """Compute Potts model energy from sequence.
 
         Inputs:
-            S (torch.LongTensor): Sequence with shape `(num_batch, num_nodes)`.
+            S (torch.LongTensor): AF3-indexed sequence with shape `(num_batch, num_nodes)`.
             h (torch.Tensor): Potts model fields :math:`h_i(s_i)` with shape
                 `(num_batch, num_nodes, num_states)`.
             J (Tensor): Potts model couplings :math:`J_{ij}(s_i, s_j)` with shape
@@ -304,17 +309,7 @@ class GraphPotts(nn.Module):
             U (torch.Tensor): Potts total energies with shape `(num_batch)`.
                 Lower energies are more favorable.
         """
-        # Gather J [Batch,i,j,A_i,A_j] => J_ij(:,A_j) [Batch,i,j,A_i]
-        S_j = graph.collect_neighbors(S.unsqueeze(-1), edge_idx)
-        S_j = S_j.unsqueeze(-1).expand(-1, -1, -1, self.num_states, -1)
-        J_ij = torch.gather(J, -1, S_j).squeeze(-1)
-
-        # Sum out J contributions
-        J_i = J_ij.sum(2) / 2.0
-        r_i = h + J_i
-
-        U_i = torch.gather(r_i, 2, S.unsqueeze(-1))
-        U = U_i.sum([1, 2])
+        U, _ = compute_potts_energy(S=S, h=h, J=J, edge_idx=edge_idx, mask_i=None, mask_ij=None)
         return U
 
     def pseudolikelihood(
@@ -327,7 +322,7 @@ class GraphPotts(nn.Module):
         """Compute Potts pseudolikelihood from sequence
 
         Inputs:
-            S (torch.LongTensor): Sequence with shape `(num_batch, num_nodes)`.
+            S (torch.LongTensor): AF3-indexed sequence with shape `(num_batch, num_nodes)`.
             h (torch.Tensor): Potts model fields :math:`h_i(s_i)` with shape
                 `(num_batch, num_nodes, num_states)`.
             J (Tensor): Potts model couplings :math:`J_{ij}(s_i, s_j)` with shape
@@ -337,12 +332,13 @@ class GraphPotts(nn.Module):
 
         Outputs:
             log_probs (torch.Tensor): Potts log-pseudolihoods with shape
-                `(num_batch, num_nodes, num_states)`.
+                `(num_batch, num_nodes, len(const.POTTS_TOKENS))`.
         """
+        S_reduced, h, J, _ = normalize_potts_inputs(S=S, h=h, J=J, mask_i=None)
 
         # Gather J [Batch,i,j,A_i,A_j] => J_ij(:,A_j) [Batch,i,j,A_i]
-        S_j = graph.collect_neighbors(S.unsqueeze(-1), edge_idx)
-        S_j = S_j.unsqueeze(-1).expand(-1, -1, -1, self.num_states, -1)
+        S_j = graph.collect_neighbors(S_reduced.unsqueeze(-1), edge_idx)
+        S_j = S_j.unsqueeze(-1).expand(-1, -1, -1, h.shape[-1], -1)
         J_ij = torch.gather(J, -1, S_j).squeeze(-1)
 
         # Sum out J contributions
@@ -418,7 +414,7 @@ class GraphPotts(nn.Module):
                 structure with shape `(num_batch, num_nodes, num_neighbors_coloring)`.
 
         Returns:
-            S (torch.LongTensor): Sampled sequences with
+            S (torch.LongTensor): Sampled AF3-indexed sequences with
                 shape `(num_batch, num_nodes)`.
             U (torch.Tensor): Sampled energies with shape `(num_batch)`. Lower
                 is more favorable.
@@ -447,32 +443,80 @@ class GraphPotts(nn.Module):
 
 
 def compute_potts_energy(
+    *,
     S: torch.LongTensor,
     h: torch.Tensor,
     J: torch.Tensor,
     edge_idx: torch.LongTensor,
     mask_i: torch.Tensor | None,
     mask_ij: torch.Tensor | None,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Compute Potts model energies from sequence.
+    return_energy_components: bool = False,
+) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Compute Potts energies for an AF3-indexed sequence.
 
     Args:
-        S (torch.LongTensor): Sequence with shape `(num_batch, num_nodes)`.
-        h (torch.Tensor): Potts model fields :math:`h_i(s_i)` with shape
-            `(num_batch, num_nodes, num_states)`.
-        J (Tensor): Potts model couplings :math:`J_{ij}(s_i, s_j)` with shape
-            `(num_batch, num_nodes, num_neighbors, num_states, num_states)`.
+        S (torch.LongTensor): AF3-indexed sequence with shape `(num_batch, num_nodes)`.
+        h (torch.Tensor): Field tensor with shape `(num_batch, num_nodes, C)`,
+            where `C` is either `const.AF3_ENCODING.n_tokens` or
+            `len(const.POTTS_TOKENS)`.
+        J (Tensor): Coupling tensor with shape
+            `(num_batch, num_nodes, num_neighbors, C, C)` using the same state
+            dimension as `h`.
+        mask_i (torch.Tensor): Optional node mask with shape `(num_batch, num_nodes)`.
+        mask_ij (torch.Tensor): Optional edge mask with shape
+            `(num_batch, num_nodes, num_neighbors)`.
         edge_idx (torch.LongTensor): Edge indices with shape
             `(num_batch, num_nodes, num_neighbors)`.
-        mask_i (torch.Tensor): Node mask with shape `(num_batch, num_nodes)`.
-        mask_ij (torch.Tensor): Edge mask with shape `(num_batch, num_nodes, num_neighbors)`.
+        return_energy_components (bool): If True, also return the field and
+            coupling contributions to the total energy.
 
     Returns:
         U (torch.Tensor): Potts total energies with shape `(num_batch)`.
             Lower energies are more favorable.
-        U_i (torch.Tensor): Potts local conditional energies with shape
-            `(num_batch, num_nodes, num_states)`.
+        U_i (torch.Tensor): Potts local conditional energies in `const.POTTS_TOKENS`
+            order with shape `(num_batch, num_nodes, len(const.POTTS_TOKENS))`.
+        E_field (torch.Tensor, optional): Field energy contributions with shape `(num_batch)`.
+            Only returned if `return_energy_components=True`.
+        E_coupling (torch.Tensor, optional): Coupling energy contributions with shape `(num_batch)`.
+            Only returned if `return_energy_components=True`.
     """
+    S_reduced, h, J, _ = normalize_potts_inputs(S=S, h=h, J=J, mask_i=mask_i)
+    return _compute_potts_energy_reduced(
+        S=S_reduced,
+        h=h,
+        J=J,
+        edge_idx=edge_idx,
+        mask_i=mask_i,
+        mask_ij=mask_ij,
+        return_energy_components=return_energy_components,
+    )
+
+
+def _compute_potts_energy_reduced(
+    *,
+    S: torch.LongTensor,
+    h: torch.Tensor,
+    J: torch.Tensor,
+    edge_idx: torch.LongTensor,
+    mask_i: torch.Tensor | None,
+    mask_ij: torch.Tensor | None,
+    return_energy_components: bool = False,
+) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Compute Potts energies for reduced-state inputs.
+
+    Args:
+        S: Sequence tensor with shape `(num_batch, num_nodes)` indexed by
+            `const.POTTS_TOKENS`.
+        h: Field tensor with shape `(num_batch, num_nodes, len(const.POTTS_TOKENS))`.
+        J: Coupling tensor with shape
+            `(num_batch, num_nodes, num_neighbors, len(const.POTTS_TOKENS), len(const.POTTS_TOKENS))`.
+        edge_idx: Edge indices with shape `(num_batch, num_nodes, num_neighbors)`.
+        mask_i: Optional node mask with shape `(num_batch, num_nodes)`.
+        mask_ij: Optional edge mask with shape `(num_batch, num_nodes, num_neighbors)`.
+        return_energy_components: If `True`, also return the field and coupling
+            contributions to the total energy.
+    """
+
     # Mask out nodes and edges that are not present.
     if mask_i is not None:
         h = h * mask_i[..., None]
@@ -488,8 +532,15 @@ def compute_potts_energy(
     U_i = h + J_i
 
     # Correct for double counting in total energy
-    S_expand = S[..., None]
     U = (torch.gather(U_i, -1, S[..., None]) - 0.5 * torch.gather(J_i, -1, S[..., None])).sum((1, 2))
+
+    if return_energy_components:
+        # Field energy: contribution from fields h_i(s_i)
+        U_field = torch.gather(h, -1, S[..., None]).sum((1, 2))
+        # Coupling energy: contribution from couplings J_ij(s_i, s_j), with 0.5 factor to correct for double counting
+        U_coupling = 0.5 * torch.gather(J_i, -1, S[..., None]).sum((1, 2))
+        return U, U_i, U_field, U_coupling
+
     return U, U_i
 
 
@@ -550,24 +601,27 @@ def sample_potts(
     tuple[torch.LongTensor, torch.Tensor],
     tuple[torch.LongTensor, torch.Tensor, list[torch.LongTensor], list[torch.Tensor]],
 ]:
-    """Sample from Potts model with Chromatic Gibbs sampling.
+    """Sample from a Potts model.
 
     Args:
-        h (torch.Tensor): Potts model fields :math:`h_i(s_i)` with shape
-            `(num_batch, num_nodes, num_states)`.
-        J (Tensor): Potts model couplings :math:`J_{ij}(s_i, s_j)` with shape
-            `(num_batch, num_nodes, num_neighbors, num_states, num_states)`.
+        h (torch.Tensor): Field tensor with shape `(num_batch, num_nodes, C)`,
+            where `C` is either `const.AF3_ENCODING.n_tokens` or
+            `len(const.POTTS_TOKENS)`.
+        J (Tensor): Coupling tensor with shape
+            `(num_batch, num_nodes, num_neighbors, C, C)` using the same state
+            dimension as `h`.
         edge_idx (torch.LongTensor): Edge indices with shape
             `(num_batch, num_nodes, num_neighbors)`.
         mask_i (torch.Tensor): Node mask with shape `(num_batch, num_nodes)`.
         mask_ij (torch.Tensor): Edge mask with shape
             `(num_batch, num_nodes, num_neighbors)`.
-        S (torch.LongTensor, optional): Sequence for initialization with
-            shape `(num_batch, num_nodes)`.
+        S (torch.LongTensor, optional): AF3-indexed sequence for initialization
+            with shape `(num_batch, num_nodes)`.
         mask_sample (torch.Tensor, optional): Binary sampling mask indicating
             positions which are free to change with shape
             `(num_batch, num_nodes)` or which tokens are acceptable at each position
-            with shape `(num_batch, num_nodes, alphabet)`.
+            with shape `(num_batch, num_nodes, alphabet)`. A 3D mask may use the
+            AF3 token axis or the reduced Potts token axis.
         num_sweeps (int): Number of sweeps of Chromatic Gibbs to perform,
             i.e. the depth of sampling as measured by the number of times
             every position has had an opportunity to update.
@@ -602,17 +656,25 @@ def sample_potts(
             structure with shape `(num_batch, num_nodes, num_neighbors_coloring)`.
 
     Returns:
-        S (torch.LongTensor): Sampled sequences with
+        S (torch.LongTensor): Sampled AF3-indexed sequences with
             shape `(num_batch, num_nodes)`.
         U (torch.Tensor): Sampled energies with shape `(num_batch)`. Lower is more
             favorable.
         S_trajectory (list[torch.LongTensor]): List of sampled sequences through
-            time each with shape `(num_batch, num_nodes)`.
+            time, each AF3-indexed with shape `(num_batch, num_nodes)`.
         U_trajectory (list[torch.Tensor]): List of sampled energies through time
             each with shape `(num_batch)`.
     """
+    S_reduced, h, J, mask_sample_reduced = normalize_potts_inputs(
+        S=S,
+        h=h,
+        J=J,
+        mask_i=mask_i,
+        mask_S=mask_sample,
+    )
+
     # Initialize masked proposals and mask h
-    mask_S, mask_mutatable, S = init_sampling_masks(-h, mask_sample, S)
+    mask_S, mask_mutatable, S_reduced = init_sampling_masks(-h, mask_sample_reduced, S_reduced)
     h_numerical_zero = h.max() + 1e3 * max(1.0, temperature)
     h = torch.where(mask_S > 0, h, h_numerical_zero * torch.ones_like(h))
 
@@ -669,16 +731,16 @@ def sample_potts(
         if proposal == "chromatic":
             mask_update = schedule.eq(i % num_colors)
         else:
-            mask_update = torch.ones_like(S) > 0
+            mask_update = torch.ones_like(S_reduced) > 0
         if mask_mutatable is not None:
             mask_update = mask_update * (mask_mutatable > 0)
 
         # Compute current energy and local conditionals
-        U, logp = _energy_proposal(S, T_i)
+        U, logp = _energy_proposal(S_reduced, T_i)
 
         # Propose
         S_new = torch.distributions.categorical.Categorical(logits=logp).sample()
-        S_new = torch.where(mask_update, S_new, S)
+        S_new = torch.where(mask_update, S_new, S_reduced)
 
         # Metropolis-Hastings adjusment
         if rejection_step:
@@ -691,7 +753,7 @@ def sample_potts(
 
             U_new, logp_new = _energy_proposal(S_new, T_i)
 
-            _flux_backward = _flux(U_new, logp_new, S)
+            _flux_backward = _flux(U_new, logp_new, S_reduced)
             _flux_forward = _flux(U, logp, S_new)
             acc_ratio = torch.exp((_flux_backward - _flux_forward)).clamp(max=1.0)
             if verbose:  # and i % 100 == 0:
@@ -701,20 +763,25 @@ def sample_potts(
                     f"\t{acc_ratio.mean().item():0.2f}"
                 )
             u = torch.bernoulli(acc_ratio)[..., None]
-            S = torch.where(u > 0, S_new, S)
-            cumulative_sweeps += (u * mask_update).sum(1).mean().item() / S.shape[1]
+            S_reduced = torch.where(u > 0, S_new, S_reduced)
+            cumulative_sweeps += (u * mask_update).sum(1).mean().item() / S_reduced.shape[1]
         else:
-            S = S_new
-            cumulative_sweeps += (mask_update).float().sum(1).mean().item() / S.shape[1]
+            S_reduced = S_new
+            cumulative_sweeps += (mask_update).float().sum(1).mean().item() / S_reduced.shape[1]
 
         if return_trajectory and i % (thin_sweeps) == 0:
-            S_trajectory.append(S)
+            S_trajectory.append(S_reduced)
             U_trajectory.append(U)
 
-        U, _ = compute_potts_energy(S, h, J, edge_idx, mask_i, mask_ij)
+        U, _ = _compute_potts_energy_reduced(
+            S=S_reduced, h=h, J=J, edge_idx=edge_idx, mask_i=mask_i, mask_ij=mask_ij
+        )
 
     if verbose:
         print(f"Effective number of sweeps: {cumulative_sweeps}")
+    S = map_potts_indices_to_af3(S_reduced)
+    if return_trajectory:
+        S_trajectory = [map_potts_indices_to_af3(S_i) for S_i in S_trajectory]
     if return_trajectory:
         return S, U, S_trajectory, U_trajectory
     else:
@@ -795,7 +862,7 @@ def init_sampling_masks(
 
 
 def _potts_proposal_gibbs(S, h, J, edge_idx, mask_i, mask_ij, T=1.0, penalty_func=None, differentiable_penalty=True):
-    U, U_i = compute_potts_energy(S, h, J, edge_idx, mask_i, mask_ij)
+    U, U_i = _compute_potts_energy_reduced(S=S, h=h, J=J, edge_idx=edge_idx, mask_i=mask_i, mask_ij=mask_ij)
 
     if penalty_func is not None:
         if differentiable_penalty:
@@ -829,7 +896,7 @@ def _potts_proposal_dlmc(
     balancing_func="sigmoid",
 ):
     # Compute energy gap
-    U, U_i = compute_potts_energy(S, h, J, edge_idx, mask_i, mask_ij)
+    U, U_i = _compute_potts_energy_reduced(S=S, h=h, J=J, edge_idx=edge_idx, mask_i=mask_i, mask_ij=mask_ij)
     # print(U)
     U_i = U_i
     if penalty_func is not None:
@@ -902,14 +969,16 @@ def log_composite_likelihood(
     mask_ij: torch.Tensor,
     smoothing_alpha: float = 0.0,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Compute Potts pairwise composite likelihoods from sequence.
+    """Compute Potts pairwise composite likelihoods from an AF3-indexed sequence.
 
     Inputs:
-        S (torch.LongTensor): Sequence with shape `(num_batch, num_nodes)`.
-        h (torch.Tensor): Potts model fields :math:`h_i(s_i)` with shape
-            `(num_batch, num_nodes, num_states)`.
-        J (Tensor): Potts model couplings :math:`J_{ij}(s_i, s_j)` with shape
-            `(num_batch, num_nodes, num_neighbors, num_states, num_states)`.
+        S (torch.LongTensor): AF3-indexed sequence with shape `(num_batch, num_nodes)`.
+        h (torch.Tensor): Field tensor with shape `(num_batch, num_nodes, C)`,
+            where `C` is either `const.AF3_ENCODING.n_tokens` or
+            `len(const.POTTS_TOKENS)`.
+        J (Tensor): Coupling tensor with shape
+            `(num_batch, num_nodes, num_neighbors, C, C)` using the same state
+            dimension as `h`.
         edge_idx (torch.LongTensor): Edge indices with shape
             `(num_batch, num_nodes, num_neighbors)`.
         mask_i (torch.Tensor): Node mask with shape `(num_batch, num_nodes)`
@@ -923,6 +992,41 @@ def log_composite_likelihood(
             `(num_batch, num_nodes, num_neighbors)`.
         mask_p_ij (torch.Tensor): Edge mask with shape
             `(num_batch, num_nodes, num_neighbors)`.
+    """
+    S_reduced, h, J, _ = normalize_potts_inputs(S=S, h=h, J=J, mask_i=mask_i)
+    return _log_composite_likelihood_reduced(
+        S=S_reduced,
+        h=h,
+        J=J,
+        edge_idx=edge_idx,
+        mask_i=mask_i,
+        mask_ij=mask_ij,
+        smoothing_alpha=smoothing_alpha,
+    )
+
+
+def _log_composite_likelihood_reduced(
+    *,
+    S: torch.LongTensor,
+    h: torch.Tensor,
+    J: torch.Tensor,
+    edge_idx: torch.LongTensor,
+    mask_i: torch.Tensor,
+    mask_ij: torch.Tensor,
+    smoothing_alpha: float = 0.0,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Compute composite likelihood for reduced-state inputs.
+
+    Args:
+        S: Sequence tensor with shape `(num_batch, num_nodes)` indexed by
+            `const.POTTS_TOKENS`.
+        h: Field tensor with shape `(num_batch, num_nodes, len(const.POTTS_TOKENS))`.
+        J: Coupling tensor with shape
+            `(num_batch, num_nodes, num_neighbors, len(const.POTTS_TOKENS), len(const.POTTS_TOKENS))`.
+        edge_idx: Edge indices with shape `(num_batch, num_nodes, num_neighbors)`.
+        mask_i: Node mask with shape `(num_batch, num_nodes)`.
+        mask_ij: Edge mask with shape `(num_batch, num_nodes, num_neighbors)`.
+        smoothing_alpha: Label smoothing probability.
     """
     num_batch, num_residues, num_k, num_states, _ = list(J.size())
 

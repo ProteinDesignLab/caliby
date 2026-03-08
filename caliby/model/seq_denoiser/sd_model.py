@@ -114,12 +114,12 @@ class SeqDenoiser(nn.Module):
 
         # Score sequences for each sample.
         U, U_i = compute_potts_energy(
-            S,
-            potts_decoder_aux["h"],
-            potts_decoder_aux["J"],
-            potts_decoder_aux["edge_idx"],
-            potts_decoder_aux["mask_i"],
-            potts_decoder_aux["mask_ij"],
+            S=S,
+            h=potts_decoder_aux["h"],
+            J=potts_decoder_aux["J"],
+            edge_idx=potts_decoder_aux["edge_idx"],
+            mask_i=potts_decoder_aux["mask_i"],
+            mask_ij=potts_decoder_aux["mask_ij"],
         )
 
         # Store outputs.
