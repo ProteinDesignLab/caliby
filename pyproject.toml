@@ -11,7 +11,7 @@ license = "Apache-2.0"
 readme = "README.md"
 dependencies = [
     "atomworks==2.2.0",
-    "biotite==1.6.0",
+    "biotite==1.4.0",
     "einops>=0.8.1",
     "huggingface_hub",
     "hydra-core==1.3.2",
@@ -23,7 +23,6 @@ dependencies = [
     "p-tqdm==1.4.2",
     "pandas==2.3.3",
     "pyyaml==6.0.3",
-    "rdkit==2024.3.2",
     "torch==2.6.0",
     "torchtyping==0.1.5",
     "tqdm==4.66.5",
@@ -38,9 +37,6 @@ af2 = [
     "colabdesign @ git+https://github.com/sokrypton/ColabDesign.git@d024c4e846fea83c090afcbe89a313eeee8ec01e",
     "jax[cuda12]==0.4.34",
 ]
-
-[tool.uv]
-override-dependencies = ["rdkit==2024.3.2", "biotite==1.6.0"]
 
 [tool.setuptools.packages.find]
 exclude = ["tests", "scripts"]
