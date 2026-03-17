@@ -50,8 +50,13 @@ mkdir -p ${ENV_DIR}
 uv venv ${ENV_DIR}/caliby -p python3.12
 source ${ENV_DIR}/caliby/bin/activate
 
-# Install Caliby.
+# Install Caliby from the local checkout.
 uv pip install -e .
+```
+
+Or install directly from GitHub without cloning:
+```bash
+uv pip install "git+https://github.com/ProteinDesignLab/caliby.git"
 ```
 
 ## Option 2: Apptainer installation

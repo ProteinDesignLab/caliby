@@ -10,7 +10,7 @@ requires-python = ">=3.12"
 license = "Apache-2.0"
 readme = "README.md"
 dependencies = [
-    "atomworks==2.2.0",
+    "atomworks-caliby @ git+https://github.com/richardshuai/atomworks-caliby.git@atomworks-caliby-v1.0.0",
     "biotite==1.6.0",
     "einops>=0.8.1",
     "huggingface_hub",
@@ -23,7 +23,7 @@ dependencies = [
     "p-tqdm==1.4.2",
     "pandas==2.3.3",
     "pyyaml==6.0.3",
-    "rdkit==2024.3.2",
+    "rdkit>=2024.3.2,<2025.9",
     "torch==2.6.0",
     "torchtyping==0.1.5",
     "tqdm==4.66.5",
@@ -38,9 +38,6 @@ af2 = [
     "colabdesign @ git+https://github.com/sokrypton/ColabDesign.git@d024c4e846fea83c090afcbe89a313eeee8ec01e",
     "jax[cuda12]==0.4.34",
 ]
-
-[tool.uv]
-override-dependencies = ["rdkit==2024.3.2", "biotite==1.6.0"]
 
 [tool.setuptools.packages.find]
 exclude = ["tests", "scripts"]
