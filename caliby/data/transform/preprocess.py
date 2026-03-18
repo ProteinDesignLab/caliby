@@ -1,5 +1,5 @@
 import numpy as np
-from atomworks.constants import AF3_EXCLUDED_LIGANDS, STANDARD_AA, STANDARD_DNA, STANDARD_RNA
+from atomworks.constants import AF3_EXCLUDED_LIGANDS, STANDARD_AA, STANDARD_DNA, STANDARD_RNA, UNKNOWN_AA
 from atomworks.ml.transforms.atom_array import (
     AddGlobalAtomIdAnnotation,
     AddGlobalTokenIdAnnotation,
@@ -37,10 +37,12 @@ from atomworks.ml.transforms.filters import (
 )
 from caliby.data.transform.preprocess_transforms import FlagCovalentModifications
 
+UNDESIRED_RES_NAMES = tuple(dict.fromkeys(res_name for res_name in AF3_EXCLUDED_LIGANDS if res_name != UNKNOWN_AA))
+
 
 def preprocess_transform(
     # Preprocessing
-    undesired_res_names: list[str] = AF3_EXCLUDED_LIGANDS,
+    undesired_res_names: list[str] | tuple[str, ...] = UNDESIRED_RES_NAMES,
     b_factor_min: float | None = None,
     b_factor_max: float | None = None,
 ) -> Transform:
@@ -57,14 +59,13 @@ def preprocess_transform(
         RemoveUnresolvedPNUnits(),
         RemovePolymersWithTooFewResolvedResidues(min_residues=4),
         MaskPolymerResiduesWithUnresolvedFrameAtoms(),
-        # NOTE: For inference, we must keep UNL to support ligands that are not in the CCD
         HandleUndesiredResTokens(undesired_res_tokens=undesired_res_names),  # e.g., non-standard residues
         FlagCovalentModifications(),
         FlagNonPolymersForAtomization(),
         AddGlobalAtomIdAnnotation(allow_overwrite=True),
         AtomizeByCCDName(
             atomize_by_default=True,
-            res_names_to_ignore=STANDARD_AA + STANDARD_RNA + STANDARD_DNA,
+            res_names_to_ignore=(*STANDARD_AA, *STANDARD_RNA, *STANDARD_DNA, UNKNOWN_AA),
             move_atomized_part_to_end=False,
             validate_atomize=False,
         ),
