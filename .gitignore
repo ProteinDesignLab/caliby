@@ -177,4 +177,5 @@ wandb/
 .idea/
 
 CLAUDE.md
+AGENTS.md
 .claude

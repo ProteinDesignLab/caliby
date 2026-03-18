@@ -130,6 +130,8 @@ All sequence design scripts automatically save the global energy of the sequence
 
 You can also score a sequence against an ensemble of backbones via `examples/scripts/score_ensemble.sh`, where the ensembles should be provided in the same format as described in the previous section. When scoring a sequence against an ensemble, the sequence corresponding to the primary conformer will be scored, and the sequences of the additional conformers will be ignored.
 
+**Multichain scoring:** When providing sequences for multichain structures in `score_inputs_csv`, chains should be separated by `:` and listed in alphabetical order by chain ID (e.g., `MKFWST:AGVLIP` for chains A and B). This matches the chain ordering used in design output CSVs.
+
 Potts quantities are stored in a reduced alphabet defined by `const.POTTS_TOKENS`, rather than the full AF3 token vocabulary. In particular, if you save Potts parameters via `++sampling_cfg_overrides.save_potts_params=true`, the saved `h` and `J` tensors use `C = len(const.POTTS_TOKENS)` states. Likewise, when scoring proteins, `save_local_conditionals=true` saves `.npy` files of shape `(N, C)` for each scored example, where `C = len(const.POTTS_TOKENS)` and the final axis should be interpreted with `const.POTTS_TOKENS`.
 
 ## Additional sequence design options
