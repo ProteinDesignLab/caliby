@@ -11,7 +11,7 @@ HF_REPO_ID = "ProteinDesignLab/caliby-weights"
 MODEL_REGISTRY = {
     "caliby": "caliby/caliby.ckpt",
     "soluble_caliby": "caliby/soluble_caliby.ckpt",
-    "solublecaliby_v1": "caliby/soluble_caliby_v1.ckpt",
+    "soluble_caliby_v1": "caliby/soluble_caliby_v1.ckpt",
     "caliby_packer_000": "caliby/caliby_packer_000.ckpt",
     "caliby_packer_010": "caliby/caliby_packer_010.ckpt",
     "caliby_packer_030": "caliby/caliby_packer_030.ckpt",

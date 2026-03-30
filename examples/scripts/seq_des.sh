@@ -3,7 +3,7 @@
 
 source env_setup.sh
 python3 caliby/eval/sampling/seq_des.py \
-    ckpt_name_or_path=solublecaliby_v1 \
+    ckpt_name_or_path=soluble_caliby_v1 \
     input_cfg.pdb_dir=examples/example_data/native_pdbs \
     sampling_cfg_overrides.num_seqs_per_pdb=4 \
     out_dir=examples/outputs/seq_des

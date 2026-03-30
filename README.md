@@ -88,7 +88,7 @@ We offer the following model checkpoints, specified via the `ckpt_name_or_path` 
 |-------|---------|-------------|
 | Caliby | `caliby` (default) | Default model trained on all chains in the PDB with 0.3Å Gaussian noise. Trained on monomers only. |
 | SolubleCaliby | `soluble_caliby` | Analog to SolubleMPNN ([Goverde et al., 2024](https://www.nature.com/articles/s41586-024-07601-y)) trained by excluding all annotated transmembrane proteins. Trained on monomers only. |
-| SolubleCaliby v1 | `solublecaliby_v1` | SolubleCaliby trained on both monomers and interfaces |
+| SolubleCaliby v1 | `soluble_caliby_v1` | SolubleCaliby trained on both monomers and interfaces |
 
 **Sidechain packing:**
 
