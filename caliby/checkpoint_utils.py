@@ -1,9 +1,20 @@
+import inspect
 from pathlib import Path
 from typing import Any, Union
 
 import lightning as L
 import torch
 from omegaconf import DictConfig, OmegaConf, open_dict
+
+# Lightning >=2.6 added a `weights_only` parameter to load_from_checkpoint.
+# Older versions default to weights_only=False internally, so no override is needed.
+_sig = inspect.signature(L.LightningModule.load_from_checkpoint)
+_LOAD_CKPT_KWARGS: dict[str, Any] = {"weights_only": False} if "weights_only" in _sig.parameters else {}
+
+
+def load_from_checkpoint(model_cls: type[L.LightningModule], ckpt_path: str) -> L.LightningModule:
+    """Load a LightningModule checkpoint, handling weights_only across Lightning versions."""
+    return model_cls.load_from_checkpoint(ckpt_path, **_LOAD_CKPT_KWARGS)
 
 
 def migrate_legacy_state_dict(state_dict: dict[str, Any], cfg: DictConfig) -> dict[str, Any]:
@@ -116,7 +127,7 @@ def resume_ckpt_cfg(current_cfg: DictConfig) -> DictConfig:
         # if trying to override optimizer, throw an error
         if "optim" in resume_opts.overrides:
             raise ValueError(
-                "Cannot override optimizer when resuming training, we probably have to switch away from pure Lightning to do this better..."
+                "Cannot override optimizer when resuming training..."
             )
 
     # apply specific overrides

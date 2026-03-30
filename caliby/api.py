@@ -376,7 +376,7 @@ def load_model(
     import torch
     from omegaconf import OmegaConf
 
-    from caliby.checkpoint_utils import get_cfg_from_ckpt
+    from caliby.checkpoint_utils import get_cfg_from_ckpt, load_from_checkpoint
     from caliby.model.seq_denoiser.lit_sd_model import LitSeqDenoiser
     from caliby.weights import resolve_ckpt_path
 
@@ -384,7 +384,7 @@ def load_model(
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
     ckpt_path = resolve_ckpt_path(model_name)
-    lit_sd_model = LitSeqDenoiser.load_from_checkpoint(ckpt_path).eval()
+    lit_sd_model = load_from_checkpoint(LitSeqDenoiser, ckpt_path).eval()
     model_cfg, _ = get_cfg_from_ckpt(ckpt_path)
     data_cfg = hydra.utils.instantiate(model_cfg.data)
 

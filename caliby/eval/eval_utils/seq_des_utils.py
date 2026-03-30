@@ -22,7 +22,7 @@ from torchtyping import TensorType
 from tqdm import tqdm
 
 import caliby.data.const as const
-from caliby.checkpoint_utils import get_cfg_from_ckpt
+from caliby.checkpoint_utils import get_cfg_from_ckpt, load_from_checkpoint
 from caliby.data.data import to
 from caliby.data.datasets.atomworks_sd_dataset import sd_collator
 from caliby.data.transform.preprocess import preprocess_transform
@@ -79,7 +79,7 @@ def get_seq_des_model(cfg: DictConfig, device: str) -> dict[str, Any]:
     seq_des_model = {"model_name": model_name, "cfg": cfg, "device": device}
 
     ckpt_path = resolve_ckpt_path(cfg.atom_mpnn.ckpt_name_or_path)
-    lit_sd_model = LitSeqDenoiser.load_from_checkpoint(ckpt_path).eval()
+    lit_sd_model = load_from_checkpoint(LitSeqDenoiser, ckpt_path).eval()
     model_cfg, _ = get_cfg_from_ckpt(ckpt_path)
     data_cfg = hydra.utils.instantiate(model_cfg.data)
     sampling_cfg = OmegaConf.load(cfg.atom_mpnn.sampling_cfg)

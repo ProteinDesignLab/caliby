@@ -257,23 +257,28 @@ def compute_packing_metrics(*, pdb1: str, pdb2: str, out_dir: str) -> dict[str, 
         (tokenwise_scn_rmsds * standard_prot_mask).sum() / standard_prot_mask.sum().clamp(min=1)
     ).item()
 
-    # Compute chi angle errors.
-    chi_angles1 = struc.dihedral_side_chain(example1["atom_array"])
-    chi_angles2 = struc.dihedral_side_chain(example2["atom_array"])
-    chi_mask = np.isfinite(chi_angles1) & np.isfinite(chi_angles2)
+    # Compute chi angle errors (requires biotite >= 1.6.0 for dihedral_side_chain).
+    if hasattr(struc, "dihedral_side_chain"):
+        chi_angles1 = struc.dihedral_side_chain(example1["atom_array"])
+        chi_angles2 = struc.dihedral_side_chain(example2["atom_array"])
+        chi_mask = np.isfinite(chi_angles1) & np.isfinite(chi_angles2)
 
-    # Get residue names for symmetric chi handling.
-    res_names = struc.get_residues(example1["atom_array"])[1]
-    symmetric_chi_mask = _get_symmetric_chi_mask(res_names, chi_angles1.shape)
+        # Get residue names for symmetric chi handling.
+        res_names = struc.get_residues(example1["atom_array"])[1]
+        symmetric_chi_mask = _get_symmetric_chi_mask(res_names, chi_angles1.shape)
 
-    chi_metrics = _chi_metrics(chi_angles1, chi_angles2, chi_mask, symmetric_chi_mask)
+        chi_metrics = _chi_metrics(chi_angles1, chi_angles2, chi_mask, symmetric_chi_mask)
 
-    for i in range(0, 4):
-        chi_mae_i = chi_metrics["chi_mae"][:, i]
-        chi_acc_i = chi_metrics["chi_acc"][:, i]
-        chi_mask_i = chi_mask[:, i]
-        metrics[f"chi_{i+1}_mae"] = chi_mae_i[chi_mask_i].mean()
-        metrics[f"chi_{i+1}_acc"] = chi_acc_i[chi_mask_i].mean()
+        for i in range(0, 4):
+            chi_mae_i = chi_metrics["chi_mae"][:, i]
+            chi_acc_i = chi_metrics["chi_acc"][:, i]
+            chi_mask_i = chi_mask[:, i]
+            metrics[f"chi_{i+1}_mae"] = chi_mae_i[chi_mask_i].mean()
+            metrics[f"chi_{i+1}_acc"] = chi_acc_i[chi_mask_i].mean()
+    else:
+        for i in range(0, 4):
+            metrics[f"chi_{i+1}_mae"] = float("nan")
+            metrics[f"chi_{i+1}_acc"] = float("nan")
 
     return metrics
 
