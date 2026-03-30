@@ -42,6 +42,9 @@ af2 = [
 [tool.setuptools.packages.find]
 exclude = ["tests", "scripts"]
 
+[tool.setuptools.package-data]
+caliby = ["configs/**/*.yaml"]
+
 [tool.ruff]
 line-length = 120
 exclude = ["chroma"]
