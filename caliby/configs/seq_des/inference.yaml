@@ -23,3 +23,9 @@ potts_sampling_cfg:
   potts_temperature: 0.01
   rejection_step: false
   potts_only_cond: false  # Restrict sequence conditioning to within the potts model
+
+# Sidechain packing options
+scn_packing_cfg:
+  # Sidechain diffusion parameters.
+  num_steps: 50
+  step_scale: 1.5

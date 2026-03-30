@@ -72,7 +72,7 @@ def get_seq_des_model(cfg: DictConfig, device: str) -> dict[str, Any]:
         model_name: "atom_mpnn"  # ["atom_mpnn"]
             atom_mpnn:
                 # Atom MPNN args
-                atom_mpnn_cfg: caliby/configs/seq_des/atom_mpnn_inference.yaml
+                atom_mpnn_cfg: caliby/configs/seq_des/inference.yaml
                 atom_mpnn_ckpt:
     """
     model_name = cfg.model_name

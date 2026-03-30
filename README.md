@@ -136,7 +136,7 @@ Potts quantities are stored in a reduced alphabet defined by `const.POTTS_TOKENS
 
 ## Additional sequence design options
 
-All sequence design options can be found in `caliby/configs/seq_des/atom_mpnn_inference.yaml`. These options can be overridden from `seq_des.sh` and `seq_des_ensemble.sh` via the `sampling_cfg_overrides` argument using hydra override syntax, e.g. `++sampling_cfg_overrides.omit_aas=["C"]` or `++sampling_cfg_overrides.potts_sampling_cfg.potts_sweeps=5000`.
+All sequence design options can be found in `caliby/configs/seq_des/inference.yaml`. These options can be overridden from `seq_des.sh` and `seq_des_ensemble.sh` via the `sampling_cfg_overrides` argument using hydra override syntax, e.g. `++sampling_cfg_overrides.omit_aas=["C"]` or `++sampling_cfg_overrides.potts_sampling_cfg.potts_sweeps=5000`.
 
 ### Globally omit certain amino acids
 Caliby can omit certain amino acids from design via the `omit_aas` argument. This should be specified as a list of amino acids to omit, e.g. `["C", "G"]`.

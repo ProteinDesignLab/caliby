@@ -17,17 +17,13 @@ input_cfg:
 sampling_cfg_overrides:
   batch_size: 4
   num_workers: ${num_workers}
-  scn_packing_cfg:
-    # Sidechain diffusion parameters.
-    num_steps: 50
-    step_scale: 1.5
 
 # Sampling config
 seq_des_cfg:
   model_name: "atom_mpnn"
   atom_mpnn:
     ckpt_name_or_path: ${ckpt_name_or_path}
-    sampling_cfg: caliby/configs/seq_des/atom_mpnn_inference.yaml
+    sampling_cfg: caliby/configs/seq_des/inference.yaml
     overrides: ${sampling_cfg_overrides}
 
 hydra:
