@@ -138,6 +138,10 @@ Potts quantities are stored in a reduced alphabet defined by `const.POTTS_TOKENS
 
 All sequence design options can be found in `caliby/configs/seq_des/inference.yaml`. These options can be overridden from `seq_des.sh` and `seq_des_ensemble.sh` via the `sampling_cfg_overrides` argument using hydra override syntax, e.g. `++sampling_cfg_overrides.omit_aas=["C"]` or `++sampling_cfg_overrides.potts_sampling_cfg.potts_sweeps=5000`.
 
+
+### Sampling temperature
+By default, Caliby anneals the sampling temperature from 1.0 to 0.01, following ChromaDesign ([Ingraham et al., 2023](https://www.nature.com/articles/s41586-023-06728-8)). For more diverse sequences, you can raise the final temperature, e.g. `++sampling_cfg_overrides.potts_sampling_cfg.potts_temperature=0.1` (anneals from 1.0 to 0.1). In practice, temperatures from 0.1 to 0.2 also perform reasonably, but this will be case dependent.
+
 ### Globally omit certain amino acids
 Caliby can omit certain amino acids from design via the `omit_aas` argument. This should be specified as a list of amino acids to omit, e.g. `["C", "G"]`.
 
