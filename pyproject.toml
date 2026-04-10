@@ -12,6 +12,7 @@ readme = "README.md"
 dependencies = [
     "atomworks-caliby @ git+https://github.com/richardshuai/atomworks-caliby.git@atomworks-caliby-v1.0.0",
     "protpardelle @ git+https://github.com/ProteinDesignLab/protpardelle-1c.git@7962da091a335251fa8e5ddef5d2c937fbd9d9ae",
+    "dm-tree<0.1.10",
     "biotite>=1.4.0",
     "einops>=0.8.1",
     "huggingface_hub",
@@ -19,16 +20,16 @@ dependencies = [
     "joblib>=1.3.0",
     "lightning>=2.4.0",
     "natsort>=8.0.0",
-    "numpy>=1.26.0",
+    "numpy>=1.26.0,<2.2.0",
     "omegaconf>=2.3.0",
     "p-tqdm>=1.4.0",
-    "pandas>=2.2.0",
+    "pandas>=2.2.0,<2.3.0",
     "pyyaml>=6.0",
-    "scipy>=1.13.1",
+    "scipy>=1.13.1,<1.16.0",
     "torch>=2.6.0",
     "torchtyping==0.1.5",
     "tqdm>=4.57.0",
-    "wandb>=0.17.0",
+    "wandb>=0.17.0,<0.23.0",
 ]
 
 [project.optional-dependencies]
