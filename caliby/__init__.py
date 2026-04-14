@@ -8,6 +8,7 @@ from caliby.api import (
     generate_ensembles,
     load_model,
     make_constraints,
+    make_ensemble_constraints,
 )
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "generate_ensembles",
     "load_model",
     "make_constraints",
+    "make_ensemble_constraints",
 ]

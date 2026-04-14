@@ -420,6 +420,39 @@ def make_constraints(constraints: dict[str, dict[str, str]]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def make_ensemble_constraints(
+    constraints: dict[str, dict[str, str]],
+    pdb_to_conformers: dict[str, list[str]],
+) -> pd.DataFrame:
+    """Build a constraint DataFrame expanded across ensemble conformers.
+
+    Convenience wrapper around :func:`make_constraints` that replicates
+    each PDB's constraints for every conformer in its ensemble.
+
+    Args:
+        constraints: Maps ``pdb_key`` to a dict of constraint columns
+            (same format as :func:`make_constraints`).
+        pdb_to_conformers: Maps PDB name to list of conformer file paths
+            (same mapping passed to :meth:`CalibyModel.ensemble_sample`).
+
+    Example::
+
+        make_ensemble_constraints(
+            {"8sot": {"fixed_pos_seq": "A1-10"}},
+            {"8sot": ["8sot.cif", "conf_0.pdb", "conf_1.pdb"]},
+        )
+
+    Returns:
+        A DataFrame with one row per conformer, suitable for the
+        ``pos_constraint_df`` argument of :meth:`CalibyModel.ensemble_sample`.
+    """
+    base_df = make_constraints(constraints)
+
+    from caliby.eval.eval_utils.eval_setup_utils import get_ensemble_constraint_df
+
+    return get_ensemble_constraint_df(base_df, pdb_to_conformers)
+
+
 # ---------------------------------------------------------------------------
 # Protpardelle ensemble generation
 # ---------------------------------------------------------------------------

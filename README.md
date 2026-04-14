@@ -1,4 +1,4 @@
-<img src="assets/caliby.jpg" alt="Caliby" width="175"/>
+<img src="assets/caliby_transparent.jpg" alt="Caliby" width="175"/>
 
 # Caliby
 Official repository for Caliby, a Potts model-based protein sequence design method that can condition on structural ensembles. For more details, read our preprint: [Ensemble-conditioned protein sequence design with Caliby](https://www.biorxiv.org/content/10.1101/2025.09.30.679633v4)
@@ -6,6 +6,8 @@ Official repository for Caliby, a Potts model-based protein sequence design meth
 This repository contains code for sequence design, ensemble generation with Protpardelle-1c, ensemble-conditioned sequence design, and sequence scoring.
 
 Both this repository and Caliby are still under active development, so please reach out if you have any questions or feature requests! To re-train Caliby, training and dataset preprocessing code should mostly be provided within this repository, but we plan to update in the future with more detailed instructions.
+
+> **Python API:** Caliby also provides a Python API for programmatic use without the CLI. See the **[Python API guide](python_api.md)** for usage and examples.
 
 <img src="assets/sampling_gif.gif" alt="Sequence design trajectory" width="600"/>
 
@@ -15,6 +17,7 @@ Both this repository and Caliby are still under active development, so please re
   - [Option 2: Apptainer installation](#option-2-apptainer-installation)
 - [Download model weights](#download-model-weights)
 - [Usage](#usage)
+  - [Python API](python_api.md)
   - [Sequence design](#sequence-design)
   - [Backbone ensemble generation with Protpardelle-1c](#backbone-ensemble-generation-with-protpardelle-1c)
   - [Ensemble-conditioned sequence design](#ensemble-conditioned-sequence-design)
@@ -101,6 +104,8 @@ We offer the following model checkpoints, specified via the `ckpt_name_or_path` 
 If `ckpt_name_or_path` does not end with `.ckpt`, it is treated as a model name and automatically resolved and downloaded. If it ends with `.ckpt`, it is treated as a file path (e.g., `ckpt_name_or_path=/path/to/custom_model.ckpt`).
 
 # Usage
+
+The examples below use bash scripts with the Hydra CLI. For programmatic Python usage (e.g., in scripts or notebooks), see the **[Python API guide](python_api.md)**.
 
 ## Sequence design
 To design sequences for a set of PDBs, see `examples/scripts/seq_des.sh`. This script takes in a `input_cfg.pdb_dir` and will design sequences for all PDBs in the directory.
