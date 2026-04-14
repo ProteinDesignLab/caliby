@@ -18,6 +18,7 @@ Both this repository and Caliby are still under active development, so please re
 - [Download model weights](#download-model-weights)
 - [Usage](#usage)
   - [Python API](python_api.md)
+  - [Cleaning input structures](#cleaning-input-structures)
   - [Sequence design](#sequence-design)
   - [Backbone ensemble generation with Protpardelle-1c](#backbone-ensemble-generation-with-protpardelle-1c)
   - [Ensemble-conditioned sequence design](#ensemble-conditioned-sequence-design)
@@ -106,6 +107,22 @@ If `ckpt_name_or_path` does not end with `.ckpt`, it is treated as a model name 
 # Usage
 
 The examples below use bash scripts with the Hydra CLI. For programmatic Python usage (e.g., in scripts or notebooks), see the **[Python API guide](python_api.md)**.
+
+## Cleaning input structures
+We recommend cleaning input PDB/CIF files before sequence design, especially if the structures came from another pipeline or if you plan to generate ensembles with Protpardelle-1c. The cleaner fixes blank chain IDs, removes unresolved atoms, keeps only protein chains, filters to residue names supported by downstream tools, and writes cleaned mmCIF files. This helps avoid downstream parsing, chain ID, and residue alignment issues.
+
+For the CLI workflow, see `examples/scripts/clean_pdbs.sh`.
+
+For the Python API, you can call:
+```python
+from caliby import clean_pdbs
+
+cleaned_pdb_paths = clean_pdbs(
+    ["protein1.pdb", "protein2.cif"],
+    out_dir="outputs/cleaned_pdbs",
+    num_workers=4,
+)
+```
 
 ## Sequence design
 To design sequences for a set of PDBs, see `examples/scripts/seq_des.sh`. This script takes in a `input_cfg.pdb_dir` and will design sequences for all PDBs in the directory.

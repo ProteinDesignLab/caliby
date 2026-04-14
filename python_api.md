@@ -8,6 +8,7 @@ from caliby import load_model
 
 - [Quick start](#quick-start)
 - [Loading a model](#loading-a-model)
+- [Cleaning input structures](#cleaning-input-structures)
 - [Sequence design](#sequence-design)
 - [Ensemble-conditioned sequence design](#ensemble-conditioned-sequence-design)
   - [Generating ensembles with Protpardelle-1c](#generating-ensembles-with-protpardelle-1c)
@@ -70,6 +71,23 @@ model = load_model("caliby", device="cuda:1")
 ```
 
 Available model names are listed in the [Download model weights](README.md#download-model-weights) section of the README.
+
+## Cleaning input structures
+
+We recommend cleaning input PDB/CIF files before sequence design, especially if the structures came from another pipeline or if you plan to generate ensembles with Protpardelle-1c. The cleaner fixes blank chain IDs, removes unresolved atoms, keeps only protein chains, filters to residue names supported by downstream tools, and writes cleaned mmCIF files. This helps avoid downstream parsing, chain ID, and residue alignment issues.
+
+```python
+from caliby import clean_pdbs, load_model
+
+cleaned_pdb_paths = clean_pdbs(
+    ["protein1.pdb", "protein2.cif"],
+    out_dir="outputs/cleaned_pdbs",
+    num_workers=4,
+)
+
+model = load_model("caliby")
+results = model.sample(cleaned_pdb_paths, num_seqs_per_pdb=4)
+```
 
 ## Sequence design
 
@@ -423,6 +441,18 @@ Load a Caliby model for reuse across multiple calls.
 | `model_name` | `str` | `"caliby"` | Model name or path to `.ckpt` file |
 | `device` | `str \| None` | `None` | Torch device (defaults to `"cuda"` if available) |
 | `sampling_cfg_path` | `str \| None` | `None` | Custom sampling YAML config path |
+
+### `clean_pdbs(pdb_paths, out_dir, num_workers) -> list[str]`
+
+Clean input PDB/CIF files and write cleaned mmCIF copies.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `pdb_paths` | `list[str]` | required | Paths to input PDB/CIF files |
+| `out_dir` | `str \| None` | `None` | Output directory for cleaned mmCIF files |
+| `num_workers` | `int` | `1` | Number of parallel workers |
+
+**Returns:** `list[str]` of cleaned mmCIF paths in the same order as `pdb_paths`.
 
 ### `CalibyModel.sample()`
 

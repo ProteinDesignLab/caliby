@@ -398,6 +398,44 @@ def load_model(
     return CalibyModel(model=sd_model, data_cfg=data_cfg, sampling_cfg=sampling_cfg, device=device)
 
 
+def clean_pdbs(
+    pdb_paths: list[str],
+    *,
+    out_dir: str | None = None,
+    num_workers: int = 1,
+) -> list[str]:
+    """Clean PDB/CIF files and write sanitized mmCIF copies.
+
+    This is most useful before sequence design or ensemble generation when
+    working with structures that may contain blank chain IDs, unresolved
+    atoms, or residue names unsupported by downstream tools.
+
+    Args:
+        pdb_paths: Paths to input PDB or CIF files.
+        out_dir: Directory for cleaned mmCIF files. If None, uses a temp dir.
+        num_workers: Number of parallel workers to use.
+
+    Returns:
+        List of cleaned mmCIF file paths in the same order as ``pdb_paths``.
+    """
+    from joblib import Parallel, delayed
+
+    from caliby.data.preprocessing.atomworks.clean_pdbs import clean_pdb
+
+    if num_workers < 1:
+        raise ValueError(f"num_workers must be >= 1, got {num_workers}")
+    if out_dir is None:
+        out_dir = tempfile.mkdtemp(prefix="caliby_clean_")
+
+    Path(out_dir).mkdir(parents=True, exist_ok=True)
+
+    if num_workers == 1:
+        return [clean_pdb(pdb_path, out_dir) for pdb_path in pdb_paths]
+
+    parallel = Parallel(n_jobs=num_workers)
+    return list(parallel(delayed(clean_pdb)(pdb_path, out_dir) for pdb_path in pdb_paths))
+
+
 def make_constraints(constraints: dict[str, dict[str, str]]) -> pd.DataFrame:
     """Build a positional constraint DataFrame from a dict.
 

@@ -1,6 +1,4 @@
-"""
-Clean PDB files for use with Protpardelle-1c ensemble generation.
-"""
+"""Clean structure files for use with downstream Caliby workflows."""
 
 import tempfile
 from pathlib import Path
@@ -33,13 +31,11 @@ def main(cfg: DictConfig):
     # Clean the PDB files.
     if use_parallel:
         parallel = Parallel(n_jobs=cfg.num_workers)
-        jobs = [
-            delayed(_clean_pdb)(pdb_path, cfg.out_dir) for pdb_path in pdb_files
-        ]
+        jobs = [delayed(clean_pdb)(pdb_path, cfg.out_dir) for pdb_path in pdb_files]
         list(parallel(tqdm(jobs, total=len(jobs), desc="Cleaning RCSB mmCIF files")))
     else:
         for pdb_path in tqdm(pdb_files, total=len(pdb_files), desc="Cleaning RCSB mmCIF files"):
-            _clean_pdb(pdb_path, cfg.out_dir)
+            clean_pdb(pdb_path, cfg.out_dir)
 
 
 def _fix_blank_chain_ids(pdb_path: str) -> str:
@@ -55,7 +51,16 @@ def _fix_blank_chain_ids(pdb_path: str) -> str:
     return tmp.name
 
 
-def _clean_pdb(pdb_path: str, out_dir: str):
+def clean_pdb(pdb_path: str, out_dir: str) -> str:
+    """Clean one PDB/CIF file and write a sanitized mmCIF copy.
+
+    Args:
+        pdb_path: Input PDB or CIF path.
+        out_dir: Output directory for the cleaned file.
+
+    Returns:
+        Path to the cleaned mmCIF file.
+    """
     # Try the normal path first; if the PDB has blank chain IDs, fix and retry.
     fixed_path = None
     try:
@@ -91,9 +96,11 @@ def _clean_pdb(pdb_path: str, out_dir: str):
     atom_array.chain_id = new_chain_ids
 
     # Write the PDB file.
+    Path(out_dir).mkdir(parents=True, exist_ok=True)
     out_file = f"{out_dir}/{Path(pdb_path).stem}.cif"
     with open(out_file, "w") as f:
         f.write(to_cif_string(atom_array, include_nan_coords=False))
+    return out_file
 
 
 def _pair_index_to_label(idx: int) -> str:
@@ -109,8 +116,8 @@ def _pair_index_to_label(idx: int) -> str:
     n = idx + 1  # convert to 1-based for the math
     while n > 0:
         n, rem = divmod(n - 1, 26)
-        letters.append(chr(ord('A') + rem))
-    return ''.join(reversed(letters))
+        letters.append(chr(ord("A") + rem))
+    return "".join(reversed(letters))
 
 
 if __name__ == "__main__":
