@@ -9,6 +9,8 @@ Both this repository and Caliby are still under active development, so please re
 
 > **Python API:** Caliby also provides a Python API for programmatic use without the CLI. See the **[Python API guide](python_api.md)** for usage and examples.
 
+> **Colab notebook:** Try Caliby interactively in Google Colab. [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ProteinDesignLab/caliby/blob/main/notebooks/Caliby.ipynb)
+
 <img src="assets/sampling_gif.gif" alt="Sequence design trajectory" width="600"/>
 
 # Table of Contents
