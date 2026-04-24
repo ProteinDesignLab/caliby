@@ -100,7 +100,7 @@ class CalibyModel:
             num_seqs_per_pdb: Sequences to sample per structure (default: 1).
             batch_size: Batch size for processing (default: 4).
             omit_aas: Amino acid one-letter codes to exclude, e.g. ``["C"]``.
-            num_workers: Data loading workers (default: 8).
+            num_workers: Data loading workers (default: 2).
             temperature: Potts sampling temperature (default: 0.01).
             verbose: Print constraint info (default: True).
             pos_constraint_df: Positional constraints. See :func:`make_constraints`.
@@ -203,7 +203,7 @@ class CalibyModel:
         Args:
             pdb_paths: Paths to PDB or CIF files.
             batch_size: Batch size for scoring (default: 4).
-            num_workers: Data loading workers (default: 8).
+            num_workers: Data loading workers (default: 2).
             sampling_overrides: Advanced overrides for sampling config.
 
         Returns:
@@ -236,7 +236,7 @@ class CalibyModel:
 
         Args:
             pdb_to_conformers: Maps PDB name to list of conformer file paths.
-            num_workers: Data loading workers (default: 8).
+            num_workers: Data loading workers (default: 2).
             sampling_overrides: Advanced overrides for sampling config.
 
         Returns:
@@ -328,7 +328,7 @@ class CalibyModel:
             pdb_paths: Paths to PDB or CIF files.
             out_dir: Directory for output CIF files. If None, uses a temp dir.
             batch_size: Batch size for packing (default: 4).
-            num_workers: Data loading workers (default: 8).
+            num_workers: Data loading workers (default: 2).
             sampling_overrides: Advanced overrides for sampling config.
 
         Returns:

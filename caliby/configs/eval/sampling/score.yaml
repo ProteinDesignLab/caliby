@@ -1,6 +1,6 @@
 # Run settings
 seed: 0
-num_workers: 8  # for dataloading
+num_workers: 4  # for dataloading
 
 # Inputs
 ckpt_name_or_path: caliby

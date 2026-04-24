@@ -342,9 +342,11 @@ class AtomMPNNDenoiser(BaseSeqDenoiser):
             potts_decoder_aux_i = slice_potts_decoder_aux(aux_preds_i["potts_decoder_aux"])
 
             for k, v in potts_decoder_aux_i.items():
-                potts_decoder_aux.setdefault(k, []).append(v.to(aggregate_device))
+                v = v.to(aggregate_device)
+                if k not in potts_decoder_aux:
+                    potts_decoder_aux[k] = v.new_empty(B, *v.shape[1:])
+                potts_decoder_aux[k][bi : bi + v.shape[0]].copy_(v)
             token_exists_mask.append(aux_preds_i["token_exists_mask"].to(aggregate_device))
-        potts_decoder_aux = {k: torch.cat(v, dim=0) for k, v in potts_decoder_aux.items()}
         token_exists_mask = torch.cat(token_exists_mask, dim=0)
         batch["token_exists_mask"] = token_exists_mask  # store in batch for downstream use
 

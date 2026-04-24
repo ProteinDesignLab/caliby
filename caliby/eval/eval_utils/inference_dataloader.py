@@ -62,12 +62,12 @@ class InferenceDataLoader:
     """DataLoader for inference PDB featurization with multiprocess loading and prefetching.
 
     Standard batched loading:
-        loader = InferenceDataLoader(pdb_paths, data_cfg=..., device=..., batch_size=4, num_workers=8)
+        loader = InferenceDataLoader(pdb_paths, data_cfg=..., device=..., batch_size=4, num_workers=2)
         for batch in loader:
             ...
 
     Ensemble loading (all conformers per PDB as one batch):
-        loader = InferenceDataLoader.from_conformers(pdb_to_conformers, data_cfg=..., device=..., num_workers=8)
+        loader = InferenceDataLoader.from_conformers(pdb_to_conformers, data_cfg=..., device=..., num_workers=2)
         for batch in loader:
             ...
     """
@@ -80,7 +80,7 @@ class InferenceDataLoader:
         device: str,
         batch_size: int,
         num_workers: int = 0,
-        prefetch_factor: int = 2,
+        prefetch_factor: int = 1,
     ):
         self._device = device
         dataset = _InferenceDataset(pdb_paths, data_cfg)
@@ -105,7 +105,7 @@ class InferenceDataLoader:
         data_cfg: DictConfig | None,
         device: str,
         num_workers: int = 0,
-        prefetch_factor: int = 2,
+        prefetch_factor: int = 1,
     ) -> "InferenceDataLoader":
         """Create a loader where each batch contains all conformers for one PDB."""
         pdb_names = list(pdb_to_conformers.keys())

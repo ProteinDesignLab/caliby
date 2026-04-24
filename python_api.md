@@ -463,7 +463,7 @@ Clean input PDB/CIF files and write cleaned mmCIF copies.
 | `num_seqs_per_pdb` | `int \| None` | `1` | Sequences per structure |
 | `batch_size` | `int \| None` | `4` | Batch size |
 | `omit_aas` | `list[str] \| None` | `None` | Amino acids to exclude |
-| `num_workers` | `int \| None` | `8` | Data loading workers |
+| `num_workers` | `int \| None` | `2` | Data loading workers |
 | `temperature` | `float \| None` | `0.01` | Final Potts sampling temperature |
 | `verbose` | `bool \| None` | `True` | Print constraint info |
 | `pos_constraint_df` | `DataFrame \| None` | `None` | Positional constraints |
@@ -486,7 +486,7 @@ Same parameters as `sample()`, plus:
 |-----------|------|---------|-------------|
 | `pdb_paths` | `list[str]` | required | Paths to PDB/CIF files |
 | `batch_size` | `int \| None` | `4` | Batch size |
-| `num_workers` | `int \| None` | `8` | Data loading workers |
+| `num_workers` | `int \| None` | `2` | Data loading workers |
 | `sampling_overrides` | `dict \| None` | `None` | Advanced config overrides |
 
 **Returns:** `dict` with keys `"example_id"`, `"seq"`, `"U"`, `"U_i"`.
@@ -496,7 +496,7 @@ Same parameters as `sample()`, plus:
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `pdb_to_conformers` | `dict[str, list[str]]` | required | Maps PDB name to conformer paths |
-| `num_workers` | `int \| None` | `8` | Data loading workers |
+| `num_workers` | `int \| None` | `2` | Data loading workers |
 | `sampling_overrides` | `dict \| None` | `None` | Advanced config overrides |
 
 **Returns:** `dict` with keys `"example_id"`, `"seq"`, `"U"`, `"U_i"`.
@@ -508,7 +508,7 @@ Same parameters as `sample()`, plus:
 | `pdb_paths` | `list[str]` | required | Paths to PDB/CIF files |
 | `out_dir` | `str \| None` | `None` | Output directory (temp dir if None) |
 | `batch_size` | `int \| None` | `4` | Batch size |
-| `num_workers` | `int \| None` | `8` | Data loading workers |
+| `num_workers` | `int \| None` | `2` | Data loading workers |
 | `sampling_overrides` | `dict \| None` | `None` | Advanced config overrides |
 
 **Returns:** `dict` with keys `"example_id"`, `"out_pdb"`.

@@ -4,7 +4,7 @@ defaults:
 batch_size: 4
 num_seqs_per_pdb: 1
 verbose: true
-num_workers: 8  # number of workers for data loading
+num_workers: 2  # number of workers for data loading
 
 # Sequence design options
 omit_aas: null  # exclude certain aatypes globally, e.g. ["C", "G"]. "X" is always excluded.
