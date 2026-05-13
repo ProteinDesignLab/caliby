@@ -579,6 +579,7 @@ def _fold_symmetry_pos(
         mask_ij = (edge_counts > 0) * (mask_i[:, :, None] * mask_i[:, None, :])
         edge_idx = torch.arange(N, device=edge_idx.device).expand(1, 1, -1).repeat(B, N, 1)
         J = J_new
+    J = J * mask_ij[..., None, None]
 
     # Fold Potts parameters at specified symmetry positions.
     for bi in range(B):
@@ -598,8 +599,14 @@ def _fold_symmetry_pos(
 
             # Fold pairwise terms.
             J[bi, dst_index] += J[bi, src_indices].sum(dim=0)
+            mask_ij[bi, dst_index] = (
+                (mask_ij[bi, dst_index] + mask_ij[bi, src_indices].sum(dim=0)) > 0
+            ).float()
             J[bi, src_indices] = 0
             J[bi, :, dst_index] += J[bi, :, src_indices].sum(dim=1)
+            mask_ij[bi, :, dst_index] = (
+                (mask_ij[bi, :, dst_index] + mask_ij[bi, :, src_indices].sum(dim=1)) > 0
+            ).float()
             J[bi, :, src_indices] = 0
             mask_ij[bi, src_indices, :] = 0
             mask_ij[bi, :, src_indices] = 0
