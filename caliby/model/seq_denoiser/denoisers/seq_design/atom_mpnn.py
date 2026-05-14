@@ -5,7 +5,6 @@ import torch
 import torch.nn as nn
 from omegaconf import DictConfig
 from torch.nn import functional as F
-from torchtyping import TensorType
 
 import caliby.data.const as const
 import caliby.model.seq_denoiser.denoisers.seq_design.potts as potts
@@ -15,6 +14,8 @@ from caliby.model.seq_denoiser.denoisers.seq_design.mpnn_utils import (
     gather_edges,
     gather_nodes,
 )
+
+_RESIDUE_INDEX_GAP = 100
 
 
 class CalibyMPNN(nn.Module):
@@ -91,7 +92,7 @@ class CalibyMPNN(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self, batch: dict[str, TensorType["b ..."]]):
+    def forward(self, batch: dict[str, torch.Tensor]):
         # Get token-level features.
         B, N, C = batch["restype"].shape
         h_V = torch.zeros((B, N, self.node_features), device=batch["restype"].device)
@@ -183,7 +184,7 @@ class TokenFeatures(nn.Module):
         self.edge_embedding = nn.Linear(edge_in, self.edge_n_channel, bias=False)
         self.norm_edges = nn.LayerNorm(self.edge_n_channel)
 
-    def forward(self, batch: dict[str, TensorType["b ..."]]):
+    def forward(self, batch: dict[str, torch.Tensor]):
         """
         Extract token-level edge features and build KNN graph.
         """
@@ -212,6 +213,9 @@ class TokenFeatures(nn.Module):
 
         # Positional encodings
         residue_index = batch["residue_index"]
+        if not self.use_multichain_encoding:
+            span = residue_index.amax(dim=1, keepdim=True) + _RESIDUE_INDEX_GAP + 1
+            residue_index = residue_index + batch["asym_id"] * span
         offset = residue_index[:, :, None] - residue_index[:, None, :]
         offset = gather_edges(offset[:, :, :, None], E_idx)[:, :, :, 0]  # [B, L, K]
 
@@ -441,9 +445,9 @@ class EncLayer(nn.Module):
 
 
 def atom37_to_atom14(
-    atom37_feats: TensorType["... n 37 ...", float],
-    aatype: TensorType["... n", int],
-) -> TensorType["... n 14 ...", float]:
+    atom37_feats: torch.Tensor,
+    aatype: torch.Tensor,
+) -> torch.Tensor:
     """Convert Atom37 positions to Atom14 positions."""
     device = atom37_feats.device
     num_batch_dims = len(aatype.shape)
@@ -467,7 +471,7 @@ def atom37_to_atom14(
     return atom14_feats
 
 
-def add_atom14_feats(batch: dict[str, TensorType["b ..."]]) -> dict[str, TensorType["b ..."]]:
+def add_atom14_feats(batch: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
     """
     Add atom14 feats to the batch.
     """
