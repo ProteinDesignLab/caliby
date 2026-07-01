@@ -32,7 +32,7 @@ class SDLoss(nn.Module):
                 self.loss_weights[k] = cfg.loss_weights[k]
 
         # Define losses based on task
-        if self.task == "seq_des":
+        if self.task in ["seq_des", "student-seq_des"]:
             self.loss_keys = {"seq_loss", "potts_composite_loss"}
         elif self.task == "scn_pack":
             self.loss_keys = {"scn_mse_loss", "seq_loss"}

@@ -161,9 +161,15 @@ class AtomMPNNDenoiser(BaseSeqDenoiser):
                 n_gaussian_conformers=sampling_inputs["gaussian_conformers_cfg"]["n_conformers"],
             )
 
+        if self.task == "student-seq_des":
+            self._validate_no_sidechain_conditioning(batch)
+
         # If specified, condition on sequence only in the Potts model.
+        potts_only_cond = sampling_inputs["potts_sampling_cfg"].get("potts_only_cond", False) or (
+            self.task == "student-seq_des"
+        )
         batch["seq_cond_mask_potts"] = batch["seq_cond_mask"].clone()
-        if sampling_inputs["potts_sampling_cfg"].get("potts_only_cond", False):
+        if potts_only_cond:
             print("Conditioning on sequence only in the potts model")
             batch["seq_cond_mask"] = torch.zeros_like(
                 batch["seq_cond_mask"]
@@ -310,6 +316,24 @@ class AtomMPNNDenoiser(BaseSeqDenoiser):
                 )
 
         return id_to_atom_arrays, id_to_aux
+
+    @staticmethod
+    def _validate_no_sidechain_conditioning(batch: dict[str, TensorType["b ..."]]) -> None:
+        """Reject fixed standard-protein sidechains for distill checkpoints."""
+        standard_prot_token_mask = batch["is_protein"] & ~batch["is_atomized"]
+        atomwise_standard_prot_mask = standard_prot_token_mask.gather(dim=-1, index=batch["atom_to_token_map"])
+        sidechain_atom_mask = (
+            atomwise_standard_prot_mask.bool()
+            & batch["atom_pad_mask"].bool()
+            & batch["atom_resolved_mask"].bool()
+            & ~batch["prot_bb_atom_mask"].bool()
+        )
+        if (batch["atom_cond_mask"].bool() & sidechain_atom_mask).any():
+            raise ValueError(
+                "caliby_distill/student-seq_des does not support conditioning on sidechain atoms. "
+                "Use fixed_pos_seq to fix sequence identities, or use a non-distilled Caliby checkpoint when "
+                "fixed_pos_scn is required."
+            )
 
     def compute_potts_params(
         self, batch: dict[str, TensorType["b ..."]], sampling_inputs: dict[str, Any]

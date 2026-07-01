@@ -95,6 +95,10 @@ We offer the following model checkpoints, specified via the `ckpt_name_or_path` 
 | Caliby | `caliby` (default) | Default model trained on all chains in the PDB with 0.3Å Gaussian noise. Trained on monomers only. |
 | SolubleCaliby | `soluble_caliby` | Analog to SolubleMPNN ([Goverde et al., 2024](https://www.nature.com/articles/s41586-024-07601-y)) trained by excluding all annotated transmembrane proteins. Trained on monomers only. |
 | SolubleCaliby v1 | `soluble_caliby_v1` | SolubleCaliby trained on both monomers and interfaces |
+| Caliby-distill | `caliby_distill` | Distilled version of ensemble-conditioned `caliby`, so you don't need to generate ensembles. |
+| SolubleCaliby-distill | `soluble_caliby_distill` | Distilled version of ensemble-conditioned `soluble_caliby`, so you don't need to generate ensembles. |
+
+> **Which model should I use?** The distilled models (`caliby_distill`, `soluble_caliby_distill`) skip ensemble generation entirely, making them well-suited for fast screening of many backbones. Once you have a set of backbones candidates, to design sequences you plan to take into the lab, we recommend the full ensemble → Caliby design pipeline, which has been more thoroughly validated (although the distilled models may work just as well). Distilled models are also not recommended for multistate design, as they are less sensitive to minor backbone conformation changes.
 
 **Sidechain packing:**
 

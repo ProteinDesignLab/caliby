@@ -59,9 +59,11 @@ Use `load_model()` to load a model checkpoint. The model is returned as a `Calib
 from caliby import load_model
 
 # Load by model name (weights are auto-downloaded from HuggingFace on first use).
-model = load_model("caliby")              # Default model
-model = load_model("soluble_caliby")      # Excludes transmembrane proteins
-model = load_model("soluble_caliby_v1")   # Trained on monomers and interfaces
+model = load_model("caliby")                   # Default model
+model = load_model("soluble_caliby")           # Excludes transmembrane proteins
+model = load_model("soluble_caliby_v1")        # Trained on monomers and interfaces
+model = load_model("caliby_distill")           # Distilled, no ensembles needed
+model = load_model("soluble_caliby_distill")   # Distilled, no ensembles needed
 
 # Load from a custom checkpoint path.
 model = load_model("/path/to/custom_model.ckpt")

@@ -85,7 +85,8 @@ class CalibyMPNN(nn.Module):
             self.decoder_S_potts = potts_init()
 
         # Output layers
-        self.W_out = nn.Linear(self.hidden_dim, self.n_tokens, bias=True)
+        if self.task != "student-seq_des":
+            self.W_out = nn.Linear(self.hidden_dim, self.n_tokens, bias=True)
 
         # Initialize weights
         for p in self.parameters():
@@ -145,7 +146,9 @@ class CalibyMPNN(nn.Module):
                 "mask_ij": token_mask_2d,
             }
 
-        logits = self.W_out(h_V)
+        logits = None
+        if self.task != "student-seq_des":
+            logits = self.W_out(h_V)
 
         # Output features.
         mpnn_feature_dict = {"h_V": h_V, "h_ESV": h_ESV, "E_idx": E_idx}
